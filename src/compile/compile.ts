@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { TOKEN_PACKAGE, loadTokenPackage, tokenLeaves, type LoadContext } from "../adapters/design-tokens.js";
+import { budgetEntries, emitBudgets, emitThresholds } from "../emit/budgets.js";
+import { emitGuide, guideFileName } from "../emit/guide.js";
 import { emitTheme } from "../emit/theme.js";
+import { loadEvidence } from "../threshold/stage.js";
 import { emitTokensCss } from "../emit/tokens-css.js";
 import { emitTokensTs } from "../emit/tokens-ts.js";
 import { parseSource } from "../source/parse.js";
@@ -34,6 +37,8 @@ export interface CompileOptions {
   rootDir?: string;
   tokensRepo?: string;
   cacheDir?: string;
+  /** `design/threshold-evidence.json`. Default: beside the source. Absent: every draft stays `draft`. */
+  evidencePath?: string;
 }
 
 export interface CompileReport {
@@ -58,10 +63,14 @@ export interface CompileResult {
   /** Output file name (relative to the out dir) -> content. */
   outputs: Record<string, string>;
   report: CompileReport;
+  /** Every leaf after imports were merged. */
+  leaves: Leaf[];
+  /** Every value-bearing entry the emitters wrote, including the platform-keyword fallbacks. */
+  entries: Entry[];
 }
 
-/** The files `design-kit compile` writes, in the order they are written. */
-export const OUTPUT_FILES = ["tokens.css", "tokens.ts", "theme.css", "compile-report.json"] as const;
+/** The fixed files `design-kit compile` writes; the guide is also written, named `<app>.styleguide.uibridge.json`. */
+export const OUTPUT_FILES = ["tokens.css", "tokens.ts", "theme.css", "compile-report.json", "design-budgets.json", "visual-system.thresholds.json"] as const;
 
 const byPath = <T extends { path: string }>(a: T, b: T): number => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 
@@ -200,13 +209,19 @@ export async function compileSource(opts: CompileOptions): Promise<CompileResult
     next_undeclared_group: nextUndeclaredGroup(groups),
   };
 
+  const evidencePath = opts.evidencePath ?? path.join(path.dirname(opts.sourcePath), "threshold-evidence.json");
+  const budgets = budgetEntries(leaves, loadEvidence(evidencePath));
+
   const outputs: Record<string, string> = {
     "tokens.css": emitTokensCss(entries),
     "tokens.ts": emitTokensTs(entries, report.identity.state, undeclared.map((u) => u.path)),
     "theme.css": emitTheme(entries),
     "compile-report.json": JSON.stringify(report, null, 2) + "\n",
+    [guideFileName(source.name)]: emitGuide(source.name, entries),
+    "design-budgets.json": emitBudgets(budgets.budgets),
+    "visual-system.thresholds.json": emitThresholds(budgets.thresholds),
   };
-  return { outputs, report };
+  return { outputs, report, leaves, entries };
 }
 
 /** Write the outputs under `outDir`. */

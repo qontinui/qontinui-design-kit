@@ -1,32 +1,53 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { compileSource, driftedOutputs, writeOutputs } from "./compile/compile.js";
+import { compareBounds, formatMove, stepSummary } from "./diff/diff.js";
+import type { ThresholdEntry } from "./emit/budgets.js";
+import { lintDir } from "./lint/classes.js";
+import { parseSource } from "./source/parse.js";
 import { SourceError, GROUPS } from "./source/schema.js";
 
 const USAGE = `design-kit <command> [options]
 
-  compile            compile design/language.dtcg.json into the output dir
-  compile --check    exit 1 when the committed outputs differ from a fresh compile
-  status             print each group's state and the next undeclared group
+  compile                    compile design/language.dtcg.json into the output dir
+  compile --check            exit 1 when the committed outputs differ from a fresh compile
+  status                     print each group's state and the next undeclared group
+  diff --base <ref>          print LOOSENED lines for budgets and thresholds that moved toward permissive; exit 0
+  lint-classes <dir>         find arbitrary-value classes and inline literal colours or lengths in .tsx files
+  specimen [--check]         write (or check) specimen.html: every component, variant and state, plus the board
+  check-states <url|file>    measure each specimen cell's state through the published exec door; write state-coverage.json
+  validate-guide <guide> <url|file>
+                             run the guide's rules (ui-bridge validateElement) over the page's elements
+  index [--check]            write (or check) the component index between the markers in CLAUDE.md
 
 options
   --root <dir>       project root (default: cwd)
   --source <file>    source file, relative to --root (default: design/language.dtcg.json)
   --out <dir>        output dir, relative to --root (default: src/design)
+  --base <ref>       git ref to compare against (diff)
+  --file <file>      specimen.html (specimen), CLAUDE.md (index), state-coverage.json (check-states), relative to --root
+  --kit-dir <dir>    directory holding the kit's .tsx sources or .d.ts declarations (index)
+
+exit codes: 0 ok, 1 drift or findings, 2 refused or misused, 3 UNKNOWN (the instrument could not measure)
 `;
 
 interface Args {
   command: string | null;
+  positional: string[];
   check: boolean;
   root: string;
   source: string;
   out: string;
+  base: string | null;
+  file: string | null;
+  kitDir: string | null;
 }
 
 export function parseArgs(argv: string[]): Args {
-  const a: Args = { command: null, check: false, root: process.cwd(), source: "design/language.dtcg.json", out: "src/design" };
+  const a: Args = { command: null, positional: [], check: false, root: process.cwd(), source: "design/language.dtcg.json", out: "src/design", base: null, file: null, kitDir: null };
   let i = 0;
   const value = (flag: string): string => {
     const next = argv[++i];
@@ -39,15 +60,22 @@ export function parseArgs(argv: string[]): Args {
     else if (v === "--root") a.root = path.resolve(value(v));
     else if (v === "--source") a.source = value(v);
     else if (v === "--out") a.out = value(v);
+    else if (v === "--base") a.base = value(v);
+    else if (v === "--file") a.file = value(v);
+    else if (v === "--kit-dir") a.kitDir = value(v);
     else if (v.startsWith("-")) throw new Error(`unknown option ${v}`);
     else if (a.command === null) a.command = v;
-    else throw new Error(`unexpected argument ${v}`);
+    else a.positional.push(v);
   }
   return a;
 }
 
-/** Runs the CLI and returns the exit code: 0 ok, 1 drift, 2 a source or usage error. */
-export async function main(argv: string[], out: (s: string) => void = (s) => process.stdout.write(s + "\n")): Promise<number> {
+type Out = (s: string) => void;
+
+const COMMANDS = ["compile", "status", "diff", "lint-classes", "specimen", "check-states", "validate-guide", "index"];
+
+/** Runs the CLI and returns the exit code (see USAGE). */
+export async function main(argv: string[], out: Out = (s) => process.stdout.write(s + "\n")): Promise<number> {
   let args: Args;
   try {
     args = parseArgs(argv);
@@ -55,42 +83,197 @@ export async function main(argv: string[], out: (s: string) => void = (s) => pro
     out((e as Error).message + "\n" + USAGE);
     return 2;
   }
-  if (args.command !== "compile" && args.command !== "status") {
+  if (args.command === null || !COMMANDS.includes(args.command)) {
     out(USAGE);
     return args.command === null ? 0 : 2;
   }
-  const sourcePath = path.resolve(args.root, args.source);
-  const outDir = path.resolve(args.root, args.out);
   try {
-    const { outputs, report } = await compileSource({ sourcePath, rootDir: args.root });
-    if (args.command === "status") {
-      for (const g of GROUPS) out(`${g}: ${report.groups[g].state}`);
-      out(`identity: ${report.identity.state}`);
-      out(`next undeclared group: ${report.next_undeclared_group ?? "none"}`);
-      return 0;
+    switch (args.command) {
+      case "compile":
+      case "status":
+        return await compileCommand(args, out);
+      case "diff":
+        return await diffCommand(args, out);
+      case "lint-classes":
+        return lintCommand(args, out);
+      case "specimen":
+        return await specimenCommand(args, out);
+      case "check-states":
+        return await checkStatesCommand(args, out);
+      case "validate-guide":
+        return await validateGuideCommand(args, out);
+      default:
+        return await indexCommand(args, out);
     }
-    if (args.check) {
-      const drifted = driftedOutputs(outDir, outputs);
-      if (drifted.length > 0) {
-        out(`design-kit: drift in ${drifted.join(", ")} (run \`design-kit compile\`)`);
-        return 1;
-      }
-      out("design-kit: outputs match a fresh compile");
-      return 0;
-    }
-    writeOutputs(outDir, outputs);
-    const undeclared = Object.entries(report.groups).filter(([, g]) => g.state === "undeclared").map(([n]) => n);
-    out(`design-kit: wrote ${Object.keys(outputs).length} files to ${path.relative(args.root, outDir) || "."}`);
-    out(`undeclared groups: ${undeclared.length ? undeclared.join(", ") : "none"}; identity: ${report.identity.state}`);
-    return 0;
   } catch (e) {
     if (e instanceof SourceError) {
       out("design-kit: the source was refused:\n  " + e.problems.join("\n  "));
       return 2;
     }
-    out(`design-kit: ${(e as Error).message}`);
+    const msg = (e as Error).message;
+    out(`design-kit: ${msg}`);
+    return msg.startsWith("unknown(") ? 3 : 2;
+  }
+}
+
+const sourcePathOf = (a: Args): string => path.resolve(a.root, a.source);
+const outDirOf = (a: Args): string => path.resolve(a.root, a.out);
+
+async function compileCommand(args: Args, out: Out): Promise<number> {
+  const { outputs, report } = await compileSource({ sourcePath: sourcePathOf(args), rootDir: args.root });
+  const outDir = outDirOf(args);
+  if (args.command === "status") {
+    for (const g of GROUPS) out(`${g}: ${report.groups[g].state}`);
+    out(`identity: ${report.identity.state}`);
+    out(`next undeclared group: ${report.next_undeclared_group ?? "none"}`);
+    return 0;
+  }
+  if (args.check) {
+    const drifted = driftedOutputs(outDir, outputs);
+    if (drifted.length > 0) {
+      out(`design-kit: drift in ${drifted.join(", ")} (run \`design-kit compile\`)`);
+      return 1;
+    }
+    out("design-kit: outputs match a fresh compile");
+    return 0;
+  }
+  writeOutputs(outDir, outputs);
+  const undeclared = Object.entries(report.groups).filter(([, g]) => g.state === "undeclared").map(([n]) => n);
+  out(`design-kit: wrote ${Object.keys(outputs).length} files to ${path.relative(args.root, outDir) || "."}`);
+  out(`undeclared groups: ${undeclared.length ? undeclared.join(", ") : "none"}; identity: ${report.identity.state}`);
+  return 0;
+}
+
+function gitShow(root: string, ref: string, rel: string): string | null {
+  try {
+    return execFileSync("git", ["-C", root, "show", `${ref}:./${rel.split(path.sep).join("/")}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return null;
+  }
+}
+
+async function diffCommand(args: Args, out: Out): Promise<number> {
+  if (!args.base) {
+    out("design-kit: diff needs --base <ref>\n" + USAGE);
     return 2;
   }
+  const { outputs } = await compileSource({ sourcePath: sourcePathOf(args), rootDir: args.root });
+  const rel = path.relative(args.root, outDirOf(args));
+  const moves = [];
+  for (const [file, key] of [["design-budgets.json", "budgets"], ["visual-system.thresholds.json", "thresholds"]] as const) {
+    const before = gitShow(args.root, args.base, path.join(rel, file));
+    if (before === null) {
+      out(`UNKNOWN ${file} is not readable at ${args.base}; nothing to compare`);
+      continue;
+    }
+    const base = (JSON.parse(before) as Record<string, ThresholdEntry[]>)[key] ?? [];
+    const now = (JSON.parse(outputs[file] as string) as Record<string, ThresholdEntry[]>)[key] ?? [];
+    moves.push(...compareBounds(base, now));
+  }
+  for (const m of moves) out(formatMove(m));
+  if (moves.length === 0) out("design-kit: no loosened budget or threshold");
+  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  if (summary) fs.appendFileSync(summary, stepSummary(args.base, moves));
+  return 0;
+}
+
+function lintCommand(args: Args, out: Out): number {
+  const dir = args.positional[0];
+  if (!dir) {
+    out("design-kit: lint-classes needs a directory\n" + USAGE);
+    return 2;
+  }
+  const exceptions = new Set<string>();
+  const sp = sourcePathOf(args);
+  if (fs.existsSync(sp)) {
+    for (const l of parseSource(JSON.parse(fs.readFileSync(sp, "utf8"))).leaves) {
+      if (l.group === "exceptions") exceptions.add(l.path.slice("exceptions.".length));
+    }
+  }
+  const { files, findings } = lintDir(path.resolve(args.root, dir), exceptions);
+  for (const f of findings) out(`${f.file}:${f.line}:${f.column} ${f.rule} ${f.match}`);
+  out(`design-kit lint-classes: ${files} files, ${findings.length} findings`);
+  return findings.length > 0 ? 1 : 0;
+}
+
+async function specimenCommand(args: Args, out: Out): Promise<number> {
+  const { outputs, report, entries } = await compileSource({ sourcePath: sourcePathOf(args), rootDir: args.root });
+  const { generateSpecimen } = await import("./specimen/render.js");
+  const html = generateSpecimen({ tokensCss: outputs["tokens.css"] as string, entries, identity: report.identity.state });
+  const file = path.resolve(args.root, args.file ?? "specimen.html");
+  if (args.check) {
+    if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== html) {
+      out(`design-kit: ${path.relative(args.root, file)} differs from a fresh specimen (run \`design-kit specimen\`)`);
+      return 1;
+    }
+    out("design-kit: specimen matches a fresh render");
+    return 0;
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, html);
+  out(`design-kit: wrote ${path.relative(args.root, file)}`);
+  return 0;
+}
+
+async function checkStatesCommand(args: Args, out: Out): Promise<number> {
+  const target = args.positional[0];
+  if (!target) {
+    out("design-kit: check-states needs a URL or an html file\n" + USAGE);
+    return 2;
+  }
+  const { checkStates, unexpectedUnknowns } = await import("./specimen/check-states.js");
+  const coverage = await checkStates(target, args.root);
+  const file = path.resolve(args.root, args.file ?? "state-coverage.json");
+  fs.writeFileSync(file, JSON.stringify(coverage, null, 2) + "\n");
+  for (const f of coverage.findings) out(`FINDING ${f.finding} ${f.id}: ${f.detail}`);
+  const s = coverage.summary;
+  out(`design-kit check-states: ${s.cells} cells, ${s.measured} measured, ${s.baseline} baseline, ${s.unknown} unknown, ${s.findings} findings (${coverage.instrument})`);
+  if (s.findings > 0) return 1;
+  const odd = unexpectedUnknowns(coverage);
+  if (odd.length > 0) {
+    for (const c of odd.slice(0, 5)) out(`${c.unknown} ${c.id}`);
+    return 3;
+  }
+  return 0;
+}
+
+async function validateGuideCommand(args: Args, out: Out): Promise<number> {
+  const [guide, target] = args.positional;
+  if (!guide || !target) {
+    out("design-kit: validate-guide needs <guide> <url|file>\n" + USAGE);
+    return 2;
+  }
+  const { validateGuide } = await import("./validate/guide.js");
+  const report = await validateGuide(path.resolve(args.root, guide), target, args.root);
+  const errors = report.failures.filter((f) => f.severity === "error");
+  for (const f of report.failures) out(`${f.severity.toUpperCase()} ${f.elementId} ${f.ruleId}: ${f.messages.join("; ")}`);
+  out(`design-kit validate-guide: ${report.elements} elements, ${report.rules} rules, ${report.failures.length} failures (${report.instrument})`);
+  return errors.length > 0 ? 1 : 0;
+}
+
+async function indexCommand(args: Args, out: Out): Promise<number> {
+  const ts = await import("typescript").then((m) => m.default ?? m).catch(() => {
+    throw new Error("the `typescript` package is required by `design-kit index` (install it as a dev dependency)");
+  });
+  const { ALL } = await import("./kit/registry.js");
+  const { generateIndex, applyIndex, checkIndex } = await import("./index-gen/generate.js");
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const kitDir = args.kitDir ? path.resolve(args.root, args.kitDir) : path.join(here, "kit");
+  const body = generateIndex({ sourceDir: kitDir, entries: ALL, typescript: ts as typeof import("typescript") });
+  const file = path.resolve(args.root, args.file ?? "CLAUDE.md");
+  const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+  if (args.check) {
+    const state = checkIndex(current, body);
+    if (state === "current") {
+      out("design-kit: the component index is current");
+      return 0;
+    }
+    out(`design-kit: the component index in ${path.relative(args.root, file)} is ${state} (run \`design-kit index\`)`);
+    return 1;
+  }
+  fs.writeFileSync(file, applyIndex(current, body));
+  out(`design-kit: wrote the component index (${Buffer.byteLength(body)} bytes) to ${path.relative(args.root, file)}`);
+  return 0;
 }
 
 // `node_modules/.bin/design-kit` is a symlink: compare real paths.

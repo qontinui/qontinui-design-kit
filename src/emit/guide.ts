@@ -1,0 +1,203 @@
+/**
+ * `<app>.styleguide.uibridge.json`: a `StyleGuideConfig` (ui-bridge
+ * `specs/style-types.ts`) generated from the compiled entries and the kit's own
+ * component data, never hand-written. The rules are per kit role: a colour on
+ * the palette, a radius on the scale, a heading size from the declared scale,
+ * and one rule per component that its state matrix is declared.
+ */
+import type { Entry } from "../compile/model.js";
+import { COMPONENTS, type KitEntry } from "../kit/registry.js";
+import { STATES_PROPERTY } from "../kit/style.js";
+import { GENERATED_HEADER, kebab } from "./names.js";
+
+export type StyleConstraint =
+  | { type: "exact"; property: string; value: string }
+  | { type: "oneOf"; property: string; values: string[] };
+
+export interface StyleRule {
+  id: string;
+  description: string;
+  selector?: string;
+  elementType?: string;
+  constraints: StyleConstraint[];
+  severity: "error" | "warning" | "info";
+}
+
+export interface DesignTokens {
+  colors: Record<string, string>;
+  typography: {
+    fontFamilies: Record<string, string>;
+    fontSizes: Record<string, string>;
+    fontWeights: Record<string, string>;
+    lineHeights: Record<string, string>;
+    letterSpacings: Record<string, string>;
+  };
+  spacing: Record<string, string>;
+  borderRadius: Record<string, string>;
+  shadows: Record<string, string>;
+  breakpoints: Record<string, number>;
+}
+
+export interface StyleGuideConfig {
+  version: string;
+  name: string;
+  description: string;
+  tokens: DesignTokens;
+  rules: StyleRule[];
+}
+
+export const GUIDE_VERSION = "1.0.0";
+
+/** The file name of a source's guide. */
+export const guideFileName = (name: string): string => `${kebab(name)}.styleguide.uibridge.json`;
+
+/**
+ * The computed-style spelling of a value where it is statically known: a hex
+ * colour is `rgb(r, g, b)` (or `rgba(...)`), a `rem` or `em` length is `px` at
+ * the 16px root. Anything else (a platform keyword, `color-mix`) stays as the
+ * source spells it; `design-kit validate-guide` canonicalises those through the
+ * browser before it compares.
+ */
+export function canonical(css: string): string {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(css.trim());
+  if (hex) {
+    let h = hex[1] as string;
+    if (h.length === 3) h = [...h].map((c) => c + c).join("");
+    const n = (i: number): number => parseInt(h.slice(i, i + 2), 16);
+    if (h.length === 8) return `rgba(${n(0)}, ${n(2)}, ${n(4)}, ${Math.round((n(6) / 255) * 1000) / 1000})`;
+    return `rgb(${n(0)}, ${n(2)}, ${n(4)})`;
+  }
+  const len = /^(-?\d*\.?\d+)(rem|em)$/.exec(css.trim());
+  if (len) return `${Math.round(parseFloat(len[1] as string) * 16 * 1000) / 1000}px`;
+  return css.trim();
+}
+
+function under(entries: Entry[], prefix: string): Entry[] {
+  return entries.filter((e) => e.path.startsWith(prefix));
+}
+
+const nameAfter = (e: Entry, prefix: string): string => e.path.slice(prefix.length).split(".").map(kebab).join("-");
+
+function record(entries: Entry[], prefix: string, map: (e: Entry) => string = (e) => canonical(e.css)): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const e of under(entries, prefix)) out[nameAfter(e, prefix)] = map(e);
+  return out;
+}
+
+const px = (s: string): number | null => {
+  const m = /^(-?\d*\.?\d+)px$/.exec(s);
+  return m ? parseFloat(m[1] as string) : null;
+};
+
+/** Heading sizes: the declared scale steps above the `md` body step, or the whole scale when it has no `md`. */
+export function headingSizes(scale: Record<string, string>): string[] {
+  const body = scale["md"] !== undefined ? px(scale["md"]) : null;
+  const all = Object.values(scale);
+  if (body === null) return all;
+  return all.filter((v) => (px(v) ?? 0) > body);
+}
+
+function tokensOf(entries: Entry[]): DesignTokens {
+  const breakpoints: Record<string, number> = {};
+  for (const [k, v] of Object.entries(record(entries, "layout.breakpoint."))) {
+    const n = px(v);
+    if (n !== null) breakpoints[k] = n;
+  }
+  return {
+    colors: record(entries, "color."),
+    typography: {
+      fontFamilies: record(entries, "type.family."),
+      fontSizes: record(entries, "type.scale."),
+      fontWeights: record(entries, "type.weight."),
+      lineHeights: record(entries, "type.leading."),
+      letterSpacings: record(entries, "type.tracking."),
+    },
+    spacing: record(entries, "space.scale."),
+    borderRadius: record(entries, "space.radius."),
+    shadows: record(entries, "space.depth."),
+    breakpoints,
+  };
+}
+
+const unique = (xs: string[]): string[] => [...new Set(xs)];
+
+/** The root class of a kit component: its first rule's selector, written by `statesRule`. */
+function rootClass(e: KitEntry): string {
+  return (e.styles.rules[0] as { selector: string }).selector;
+}
+
+export function buildGuide(name: string, entries: Entry[], kit: readonly KitEntry[] = COMPONENTS): StyleGuideConfig {
+  const tokens = tokensOf(entries);
+  const rules: StyleRule[] = [];
+  const rule = (r: Omit<StyleRule, "severity">): void => {
+    rules.push({ ...r, severity: "error" });
+  };
+
+  const palette = unique(Object.values(tokens.colors));
+  if (palette.length > 0) {
+    rule({
+      id: "palette-color",
+      description: "Text colour is a colour role of the declared palette.",
+      constraints: [{ type: "oneOf", property: "color", values: palette }],
+    });
+    rule({
+      id: "palette-background-color",
+      description: "Background colour is a colour role of the declared palette, or transparent.",
+      constraints: [{ type: "oneOf", property: "backgroundColor", values: [...palette, "rgba(0, 0, 0, 0)"] }],
+    });
+  }
+
+  const sizes = unique(Object.values(tokens.typography.fontSizes));
+  if (sizes.length > 0) {
+    rule({
+      id: "font-size-on-scale",
+      description: "Font size is a step of the declared type scale.",
+      constraints: [{ type: "oneOf", property: "fontSize", values: sizes }],
+    });
+    const headings = headingSizes(tokens.typography.fontSizes);
+    if (headings.length > 0) {
+      rule({
+        id: "heading-size-on-scale",
+        description: "A heading's size is a declared scale step above the body step.",
+        elementType: "heading",
+        constraints: [{ type: "oneOf", property: "fontSize", values: unique(headings) }],
+      });
+    }
+  }
+
+  const radii = unique([...Object.values(tokens.borderRadius), ...Object.values(tokens.spacing), "0px"]);
+  if (Object.keys(tokens.borderRadius).length > 0) {
+    rule({
+      id: "border-radius-on-scale",
+      description: "Border radius is a declared radius (or a spacing step for a pill), never a literal.",
+      constraints: [{ type: "oneOf", property: "borderRadius", values: radii }],
+    });
+  }
+
+  // One rule per kit role: the component declares its state matrix (STATES_PROPERTY).
+  for (const k of kit) {
+    rule({
+      id: `${kebab(k.def.name)}-states-declared`,
+      description: `${k.def.name} declares its state matrix: ${k.def.states.join(", ")}.`,
+      selector: rootClass(k),
+      elementType: k.styles.elementType,
+      constraints: [{ type: "exact", property: STATES_PROPERTY, value: JSON.stringify(k.def.states.join(" ")) }],
+    });
+  }
+  // A control that is not the kit's (a hand-rolled button) declares no state matrix at all.
+  const buttonStates = unique(kit.filter((k) => k.styles.elementType === "button").map((k) => JSON.stringify(k.def.states.join(" "))));
+  if (buttonStates.length > 0) {
+    rule({
+      id: "button-state-declaration",
+      description: "Every button declares a state matrix; one that does not is not a kit component.",
+      elementType: "button",
+      constraints: [{ type: "oneOf", property: STATES_PROPERTY, values: buttonStates }],
+    });
+  }
+
+  return { version: GUIDE_VERSION, name, description: GENERATED_HEADER, tokens, rules };
+}
+
+export function emitGuide(name: string, entries: Entry[]): string {
+  return JSON.stringify(buildGuide(name, entries), null, 2) + "\n";
+}

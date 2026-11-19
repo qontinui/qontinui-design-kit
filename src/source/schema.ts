@@ -64,6 +64,8 @@ export interface Leaf {
   derive: DeriveSpec | null;
   /** Extra inputs an adapter used (e.g. the surface unit a resolved type scale was multiplied by). */
   inputs: Record<string, unknown> | null;
+  /** Which way a threshold or budget is permissive (`$extensions.qontinui.bound`); absent: inferred from the leaf name. */
+  bound?: "max" | "min" | "none";
 }
 
 /** The groups an `import` entry may ask a package adapter for. */

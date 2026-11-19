@@ -67,3 +67,12 @@ jobs:
         run: npm run lint
       - name: Test
         run: npm test
+      # The Phase 5 gate: the state check runs against the built specimen
+      # through the published wrapper, and the generated guide is evaluated
+      # over the same page (the first evaluator of a .styleguide.uibridge.json).
+      - name: State check and guide validation on the built specimen
+        run: |
+          node dist/cli.js compile --out .specimen/design
+          node dist/cli.js specimen --file .specimen/specimen.html
+          node dist/cli.js check-states .specimen/specimen.html --file .specimen/state-coverage.json
+          node dist/cli.js validate-guide .specimen/design/design-kit-specimen.styleguide.uibridge.json .specimen/specimen.html

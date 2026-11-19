@@ -179,7 +179,20 @@ function walk(
     }
     if (hasValue && type === null && aliasTarget(value) === null) problems.push(`leaf ${dotted}: a $value needs a $type (set it on the leaf or an enclosing group)`);
 
-    leaves.push({ path: dotted, group, type, value, source, derive, inputs });
+    const bound = ext?.["bound"];
+    if (bound !== undefined && bound !== "max" && bound !== "min" && bound !== "none") {
+      problems.push(`leaf ${dotted}: bound must be "max", "min" or "none"`);
+    }
+    leaves.push({
+      path: dotted,
+      group,
+      type,
+      value,
+      source,
+      derive,
+      inputs,
+      ...(bound === "max" || bound === "min" || bound === "none" ? { bound } : {}),
+    });
   }
 }
 
