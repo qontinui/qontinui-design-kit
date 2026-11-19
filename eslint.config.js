@@ -22,6 +22,7 @@ export default [
         URL: "readonly",
         Buffer: "readonly",
         setTimeout: "readonly",
+        clearTimeout: "readonly",
       },
     },
   },
