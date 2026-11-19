@@ -1,0 +1,920 @@
+{
+  "schema": 1,
+  "url": "specimen.html",
+  "instrument": "@qontinui/ui-bridge-wrapper@0.12.0",
+  "summary": {
+    "cells": 56,
+    "measured": 36,
+    "baseline": 10,
+    "unknown": 10,
+    "findings": 0
+  },
+  "findings": [],
+  "cells": [
+    {
+      "component": "Button",
+      "variant": "primary",
+      "state": "default",
+      "id": "cell-button-primary-default",
+      "status": "baseline",
+      "unknown": null,
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Button",
+      "variant": "primary",
+      "state": "hover",
+      "id": "cell-button-primary-hover",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "primary",
+      "state": "focus-visible",
+      "id": "cell-button-primary-focus-visible",
+      "status": "unknown",
+      "unknown": "unknown(focus-visible-not-emulated)",
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Button",
+      "variant": "primary",
+      "state": "active",
+      "id": "cell-button-primary-active",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "primary",
+      "state": "disabled",
+      "id": "cell-button-primary-disabled",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 3,
+      "properties": [
+        "color",
+        "backgroundColor",
+        "border"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "primary",
+      "state": "loading",
+      "id": "cell-button-primary-loading",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 2,
+      "properties": [
+        "color",
+        "backgroundColor"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "secondary",
+      "state": "default",
+      "id": "cell-button-secondary-default",
+      "status": "baseline",
+      "unknown": null,
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Button",
+      "variant": "secondary",
+      "state": "hover",
+      "id": "cell-button-secondary-hover",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "secondary",
+      "state": "focus-visible",
+      "id": "cell-button-secondary-focus-visible",
+      "status": "unknown",
+      "unknown": "unknown(focus-visible-not-emulated)",
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Button",
+      "variant": "secondary",
+      "state": "active",
+      "id": "cell-button-secondary-active",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "secondary",
+      "state": "disabled",
+      "id": "cell-button-secondary-disabled",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 3,
+      "properties": [
+        "color",
+        "backgroundColor",
+        "border"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "secondary",
+      "state": "loading",
+      "id": "cell-button-secondary-loading",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 2,
+      "properties": [
+        "color",
+        "backgroundColor"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "quiet",
+      "state": "default",
+      "id": "cell-button-quiet-default",
+      "status": "baseline",
+      "unknown": null,
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Button",
+      "variant": "quiet",
+      "state": "hover",
+      "id": "cell-button-quiet-hover",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "quiet",
+      "state": "focus-visible",
+      "id": "cell-button-quiet-focus-visible",
+      "status": "unknown",
+      "unknown": "unknown(focus-visible-not-emulated)",
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Button",
+      "variant": "quiet",
+      "state": "active",
+      "id": "cell-button-quiet-active",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "quiet",
+      "state": "disabled",
+      "id": "cell-button-quiet-disabled",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 3,
+      "properties": [
+        "color",
+        "backgroundColor",
+        "border"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Button",
+      "variant": "quiet",
+      "state": "loading",
+      "id": "cell-button-quiet-loading",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 2,
+      "properties": [
+        "color",
+        "backgroundColor"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "TextInput",
+      "variant": "default",
+      "state": "default",
+      "id": "cell-text-input-default-default",
+      "status": "baseline",
+      "unknown": null,
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "TextInput",
+      "variant": "default",
+      "state": "hover",
+      "id": "cell-text-input-default-hover",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "border"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "TextInput",
+      "variant": "default",
+      "state": "focus-visible",
+      "id": "cell-text-input-default-focus-visible",
+      "status": "unknown",
+      "unknown": "unknown(focus-visible-not-emulated)",
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "TextInput",
+      "variant": "default",
+      "state": "disabled",
+      "id": "cell-text-input-default-disabled",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 3,
+      "properties": [
+        "color",
+        "backgroundColor",
+        "border"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "TextInput",
+      "variant": "default",
+      "state": "error",
+      "id": "cell-text-input-default-error",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "border"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Select",
+      "variant": "default",
+      "state": "default",
+      "id": "cell-select-default-default",
+      "status": "baseline",
+      "unknown": null,
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Select",
+      "variant": "default",
+      "state": "hover",
+      "id": "cell-select-default-hover",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "border"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Select",
+      "variant": "default",
+      "state": "focus-visible",
+      "id": "cell-select-default-focus-visible",
+      "status": "unknown",
+      "unknown": "unknown(focus-visible-not-emulated)",
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Select",
+      "variant": "default",
+      "state": "active",
+      "id": "cell-select-default-active",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Select",
+      "variant": "default",
+      "state": "disabled",
+      "id": "cell-select-default-disabled",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 3,
+      "properties": [
+        "color",
+        "backgroundColor",
+        "border"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Select",
+      "variant": "default",
+      "state": "error",
+      "id": "cell-select-default-error",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "border"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Checkbox",
+      "variant": "default",
+      "state": "default",
+      "id": "cell-checkbox-default-default",
+      "status": "baseline",
+      "unknown": null,
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Checkbox",
+      "variant": "default",
+      "state": "hover",
+      "id": "cell-checkbox-default-hover",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "border"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Checkbox",
+      "variant": "default",
+      "state": "focus-visible",
+      "id": "cell-checkbox-default-focus-visible",
+      "status": "unknown",
+      "unknown": "unknown(focus-visible-not-emulated)",
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Checkbox",
+      "variant": "default",
+      "state": "active",
+      "id": "cell-checkbox-default-active",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Checkbox",
+      "variant": "default",
+      "state": "disabled",
+      "id": "cell-checkbox-default-disabled",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 3,
+      "properties": [
+        "color",
+        "backgroundColor",
+        "border"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Checkbox",
+      "variant": "default",
+      "state": "selected",
+      "id": "cell-checkbox-default-selected",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 2,
+      "properties": [
+        "backgroundColor",
+        "border"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Switch",
+      "variant": "default",
+      "state": "default",
+      "id": "cell-switch-default-default",
+      "status": "baseline",
+      "unknown": null,
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Switch",
+      "variant": "default",
+      "state": "hover",
+      "id": "cell-switch-default-hover",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Switch",
+      "variant": "default",
+      "state": "focus-visible",
+      "id": "cell-switch-default-focus-visible",
+      "status": "unknown",
+      "unknown": "unknown(focus-visible-not-emulated)",
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Switch",
+      "variant": "default",
+      "state": "active",
+      "id": "cell-switch-default-active",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Switch",
+      "variant": "default",
+      "state": "disabled",
+      "id": "cell-switch-default-disabled",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 3,
+      "properties": [
+        "color",
+        "backgroundColor",
+        "border"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Switch",
+      "variant": "default",
+      "state": "selected",
+      "id": "cell-switch-default-selected",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 2,
+      "properties": [
+        "backgroundColor",
+        "border"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Tabs",
+      "variant": "default",
+      "state": "default",
+      "id": "cell-tabs-default-default",
+      "status": "baseline",
+      "unknown": null,
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Tabs",
+      "variant": "default",
+      "state": "hover",
+      "id": "cell-tabs-default-hover",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Tabs",
+      "variant": "default",
+      "state": "focus-visible",
+      "id": "cell-tabs-default-focus-visible",
+      "status": "unknown",
+      "unknown": "unknown(focus-visible-not-emulated)",
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Tabs",
+      "variant": "default",
+      "state": "active",
+      "id": "cell-tabs-default-active",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Tabs",
+      "variant": "default",
+      "state": "disabled",
+      "id": "cell-tabs-default-disabled",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Tabs",
+      "variant": "default",
+      "state": "selected",
+      "id": "cell-tabs-default-selected",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "color"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Dialog",
+      "variant": "default",
+      "state": "default",
+      "id": "cell-dialog-default-default",
+      "status": "baseline",
+      "unknown": null,
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Dialog",
+      "variant": "default",
+      "state": "hover",
+      "id": "cell-dialog-default-hover",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Dialog",
+      "variant": "default",
+      "state": "focus-visible",
+      "id": "cell-dialog-default-focus-visible",
+      "status": "unknown",
+      "unknown": "unknown(focus-visible-not-emulated)",
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "Dialog",
+      "variant": "default",
+      "state": "active",
+      "id": "cell-dialog-default-active",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "Dialog",
+      "variant": "default",
+      "state": "disabled",
+      "id": "cell-dialog-default-disabled",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 3,
+      "properties": [
+        "color",
+        "backgroundColor",
+        "border"
+      ],
+      "ignoredProperties": [
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "DataTable",
+      "variant": "default",
+      "state": "default",
+      "id": "cell-data-table-default-default",
+      "status": "baseline",
+      "unknown": null,
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "DataTable",
+      "variant": "default",
+      "state": "hover",
+      "id": "cell-data-table-default-hover",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 1,
+      "properties": [
+        "backgroundColor"
+      ],
+      "ignoredProperties": [],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    },
+    {
+      "component": "DataTable",
+      "variant": "default",
+      "state": "focus-visible",
+      "id": "cell-data-table-default-focus-visible",
+      "status": "unknown",
+      "unknown": "unknown(focus-visible-not-emulated)",
+      "changedProperties": null,
+      "properties": [],
+      "ignoredProperties": [],
+      "tokenDerived": null,
+      "nonTokenProperties": [],
+      "complete": null
+    },
+    {
+      "component": "DataTable",
+      "variant": "default",
+      "state": "selected",
+      "id": "cell-data-table-default-selected",
+      "status": "measured",
+      "unknown": null,
+      "changedProperties": 2,
+      "properties": [
+        "color",
+        "backgroundColor"
+      ],
+      "ignoredProperties": [
+        "border",
+        "outline"
+      ],
+      "tokenDerived": true,
+      "nonTokenProperties": [],
+      "complete": true
+    }
+  ]
+}

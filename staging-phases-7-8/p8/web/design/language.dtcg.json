@@ -1,0 +1,357 @@
+{
+  "$extensions": {
+    "qontinui": {
+      "name": "qontinui-web",
+      "import": [
+        {
+          "package": "@qontinui/design-tokens",
+          "ref": "415be45",
+          "groups": [
+            "color",
+            "typeScale",
+            "durations",
+            "easings",
+            "reducedMotion"
+          ]
+        }
+      ]
+    }
+  },
+  "type": {
+    "unit": {
+      "$type": "number",
+      "$value": 0.5,
+      "$extensions": {
+        "qontinui": {
+          "source": "authored(NOTIF)"
+        }
+      }
+    },
+    "weight": {
+      "regular": {
+        "$type": "fontWeight",
+        "$value": 400,
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      },
+      "medium": {
+        "$type": "fontWeight",
+        "$value": 500,
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      },
+      "semibold": {
+        "$type": "fontWeight",
+        "$value": 600,
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      },
+      "bold": {
+        "$type": "fontWeight",
+        "$value": 700,
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      }
+    },
+    "leading": {
+      "body": {
+        "$type": "number",
+        "$value": 1.5,
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      }
+    },
+    "family": {
+      "sans": {
+        "$type": "fontFamily",
+        "$extensions": {
+          "qontinui": {
+            "source": "undeclared"
+          }
+        }
+      }
+    }
+  },
+  "space": {
+    "unit": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
+      "$extensions": {
+        "qontinui": {
+          "source": "authored(NOTIF)"
+        }
+      }
+    },
+    "scale": {
+      "1": {
+        "$type": "dimension",
+        "$extensions": {
+          "qontinui": {
+            "source": "derived(spacing-multiple)",
+            "derive": {
+              "rule": "spacing-multiple",
+              "base": 4,
+              "multiple": 1,
+              "unit": "px"
+            }
+          }
+        }
+      },
+      "2": {
+        "$type": "dimension",
+        "$extensions": {
+          "qontinui": {
+            "source": "derived(spacing-multiple)",
+            "derive": {
+              "rule": "spacing-multiple",
+              "base": 4,
+              "multiple": 2,
+              "unit": "px"
+            }
+          }
+        }
+      },
+      "3": {
+        "$type": "dimension",
+        "$extensions": {
+          "qontinui": {
+            "source": "derived(spacing-multiple)",
+            "derive": {
+              "rule": "spacing-multiple",
+              "base": 4,
+              "multiple": 3,
+              "unit": "px"
+            }
+          }
+        }
+      },
+      "4": {
+        "$type": "dimension",
+        "$extensions": {
+          "qontinui": {
+            "source": "derived(spacing-multiple)",
+            "derive": {
+              "rule": "spacing-multiple",
+              "base": 4,
+              "multiple": 4,
+              "unit": "px"
+            }
+          }
+        }
+      },
+      "6": {
+        "$type": "dimension",
+        "$extensions": {
+          "qontinui": {
+            "source": "derived(spacing-multiple)",
+            "derive": {
+              "rule": "spacing-multiple",
+              "base": 4,
+              "multiple": 6,
+              "unit": "px"
+            }
+          }
+        }
+      },
+      "8": {
+        "$type": "dimension",
+        "$extensions": {
+          "qontinui": {
+            "source": "derived(spacing-multiple)",
+            "derive": {
+              "rule": "spacing-multiple",
+              "base": 4,
+              "multiple": 8,
+              "unit": "px"
+            }
+          }
+        }
+      },
+      "12": {
+        "$type": "dimension",
+        "$extensions": {
+          "qontinui": {
+            "source": "derived(spacing-multiple)",
+            "derive": {
+              "rule": "spacing-multiple",
+              "base": 4,
+              "multiple": 12,
+              "unit": "px"
+            }
+          }
+        }
+      },
+      "16": {
+        "$type": "dimension",
+        "$extensions": {
+          "qontinui": {
+            "source": "derived(spacing-multiple)",
+            "derive": {
+              "rule": "spacing-multiple",
+              "base": 4,
+              "multiple": 16,
+              "unit": "px"
+            }
+          }
+        }
+      }
+    },
+    "radius": {
+      "sm": {
+        "$type": "dimension",
+        "$value": {
+          "value": 2,
+          "unit": "px"
+        },
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      },
+      "md": {
+        "$type": "dimension",
+        "$value": {
+          "value": 6,
+          "unit": "px"
+        },
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      },
+      "lg": {
+        "$type": "dimension",
+        "$value": {
+          "value": 8,
+          "unit": "px"
+        },
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      },
+      "xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        },
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "breakpoint": {
+      "sm": {
+        "$type": "dimension",
+        "$value": {
+          "value": 640,
+          "unit": "px"
+        },
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      },
+      "md": {
+        "$type": "dimension",
+        "$value": {
+          "value": 768,
+          "unit": "px"
+        },
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      },
+      "lg": {
+        "$type": "dimension",
+        "$value": {
+          "value": 1024,
+          "unit": "px"
+        },
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      },
+      "xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 1280,
+          "unit": "px"
+        },
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      }
+    }
+  },
+  "states": {
+    "contract": {
+      "required": {
+        "$type": "string",
+        "$value": "default hover focus-visible active disabled loading error selected",
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      }
+    }
+  },
+  "budgets": {
+    "density": {
+      "max_interactive_per_viewport": {
+        "$type": "number",
+        "$value": 40,
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      }
+    },
+    "first_viewport": {
+      "max_text_blocks": {
+        "$type": "number",
+        "$value": 24,
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(NOTIF)"
+          }
+        }
+      }
+    }
+  }
+}
