@@ -26,5 +26,5 @@ export default [
       },
     },
   },
-  { ignores: ["node_modules/**", "dist/**", "*.config.js", "test/fixtures/**"] },
+  { ignores: ["node_modules/**", "dist/**", ".dk-cache/**", ".tokens-src/**", "*.config.js", "test/fixtures/**"] },
 ];
