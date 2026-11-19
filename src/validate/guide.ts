@@ -143,6 +143,7 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
     }
     if (snap.elements.length === 0) throw new Error("unknown(no-elements): the page returned no registered elements; a guide that read nothing is not a pass");
     if (snap.truncated) throw new Error("unknown(snapshot-truncated): the page has more elements than one snapshot returns");
+    if (canon.length !== pairs.length) throw new Error("unknown(instrument-cannot-read): the canonicalisation answered a different number of values than asked");
     const map = new Map<string, string>();
     pairs.forEach(([p, v], i) => map.set(`${p}\0${v}`, String(canon[i])));
     const rules = applyCanonical(guide.rules, map);

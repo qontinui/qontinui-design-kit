@@ -33,7 +33,8 @@ export interface ComponentDoc {
   summary: string;
   use: string;
   avoid: string;
-  props: PropDoc[];
+  /** null: the props type is not an interface in the same file, so the contract cannot be read. */
+  props: PropDoc[] | null;
 }
 
 const squash = (s: string): string => s.replace(/\s+/g, " ").trim();
@@ -72,8 +73,12 @@ export function readComponents(ts: TS, sourceDir: string, names: readonly string
       const typeNode = param?.type;
       const typeName = typeNode && ts.isTypeReferenceNode(typeNode) ? typeNode.typeName.getText(sf) : null;
       const iface = typeName ? interfaces.get(typeName) : undefined;
+      if (!iface) {
+        out.set(st.name.text, { name: st.name.text, summary: doc.text, use: doc.tags.get("use") ?? "", avoid: doc.tags.get("avoid") ?? "", props: null });
+        continue;
+      }
       const props: PropDoc[] = [];
-      for (const m of iface?.members ?? []) {
+      for (const m of iface.members) {
         if (!ts.isPropertySignature(m) || !m.type) continue;
         props.push({ name: m.name.getText(sf), optional: m.questionToken !== undefined, type: squash(m.type.getText(sf)) });
       }
@@ -108,7 +113,8 @@ function entryText(e: KitEntry, doc: ComponentDoc | undefined): string {
     if (doc.summary) lines.push(doc.summary);
     if (doc.use) lines.push(`Use: ${doc.use}`);
     if (doc.avoid) lines.push(`Avoid: ${doc.avoid}`);
-    lines.push(`Props: ${doc.props.map((p) => `${p.name}${p.optional ? "?" : ""}: ${p.type}`).join("; ")}`);
+    if (doc.props === null) lines.push(`(props type of ${name} is not an interface in its file; cannot read its props)`);
+    else lines.push(`Props: ${doc.props.map((p) => `${p.name}${p.optional ? "?" : ""}: ${p.type}`).join("; ")}`);
   }
   lines.push(`Variants: ${variants.length ? variants.join("; ") : "none"}`);
   lines.push(`States: ${e.def.states.join(", ")}`);

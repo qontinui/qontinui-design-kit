@@ -31,7 +31,15 @@ export function Button({ variant = "secondary", loading = false, type = "button"
       data-variant={variant}
       data-dk-state={loading ? "loading" : undefined}
       aria-busy={loading || undefined}
-      onClick={loading ? undefined : onClick}
+      aria-disabled={loading || undefined}
+      onClick={
+        loading
+          ? (e) => {
+              // A loading button neither runs its handler nor submits its form.
+              e.preventDefault();
+            }
+          : onClick
+      }
     />
   );
 }

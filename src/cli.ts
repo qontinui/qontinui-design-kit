@@ -242,6 +242,10 @@ async function checkStatesCommand(args: Args, out: Out): Promise<number> {
   const s = coverage.summary;
   out(`design-kit check-states: ${s.cells} cells, ${s.measured} measured, ${s.baseline} baseline, ${s.unknown} unknown, ${s.findings} findings (${coverage.instrument})`);
   if (s.findings > 0) return 1;
+  if (s.measured === 0) {
+    out("design-kit: unknown(nothing-measured): no cell was measured");
+    return 3;
+  }
   const odd = unexpectedUnknowns(coverage);
   if (odd.length > 0) {
     for (const c of odd.slice(0, 5)) out(`${c.unknown} ${c.id}`);
@@ -262,6 +266,10 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
   for (const id of report.unmatchedRules) out(`UNMATCHED ${id}: no element on the page answers to this rule`);
   for (const f of report.failures) out(`${f.severity.toUpperCase()} ${f.elementId} ${f.ruleId}: ${f.messages.join("; ")}`);
   out(`design-kit validate-guide: ${report.elements} elements, ${report.rules} rules, ${report.failures.length} failures (${report.instrument})`);
+  if (errors.length === 0 && report.rules > 0 && report.unmatchedRules.length === report.rules) {
+    out("design-kit: unknown(no-rule-matched): no rule answered to any element; nothing was evaluated");
+    return 3;
+  }
   return errors.length > 0 ? 1 : 0;
 }
 
@@ -274,7 +282,7 @@ async function indexCommand(args: Args, out: Out): Promise<number> {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const kitDir = args.kitDir ? path.resolve(args.root, args.kitDir) : path.join(here, "kit");
   const body = generateIndex({ sourceDir: kitDir, entries: ALL, typescript: ts as typeof import("typescript") });
-  const unread = body.split("\n").filter((l) => l.startsWith("(no source found for"));
+  const unread = body.split("\n").filter((l) => l.startsWith("(no source found for") || l.startsWith("(props type of"));
   if (unread.length > 0) {
     out(`design-kit: cannot read the kit's props from ${kitDir}: ${unread.join(" ")}\nan index that omits a contract is UNKNOWN, not current (pass --kit-dir)`);
     return 2;

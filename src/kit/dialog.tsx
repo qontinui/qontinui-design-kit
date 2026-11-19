@@ -58,6 +58,7 @@ export const dialogStyles: ComponentStyles = {
   elementType: "button",
   rules: [
     statesRule(".dk-dialog-trigger", dialogDef),
+    statesRule(".dk-dialog-close", dialogDef),
     {
       selector: ".dk-dialog-trigger",
       decls: {
