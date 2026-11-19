@@ -87,6 +87,11 @@ export async function main(argv: string[], out: Out = (s) => process.stdout.writ
     out(USAGE);
     return args.command === null ? 0 : 2;
   }
+  const arity: Record<string, number> = { compile: 0, status: 0, diff: 0, specimen: 0, index: 0, "lint-classes": 1, "check-states": 1, "validate-guide": 2 };
+  if (args.positional.length > (arity[args.command] ?? 0)) {
+    out(`design-kit: unexpected argument ${args.positional[arity[args.command] ?? 0]}\n` + USAGE);
+    return 2;
+  }
   try {
     switch (args.command) {
       case "compile":
@@ -153,17 +158,19 @@ function gitShow(root: string, ref: string, rel: string): string | null {
 }
 
 async function diffCommand(args: Args, out: Out): Promise<number> {
-  if (!args.base) {
+  if (!args.base || args.base.startsWith("-")) {
     out("design-kit: diff needs --base <ref>\n" + USAGE);
     return 2;
   }
   const { outputs } = await compileSource({ sourcePath: sourcePathOf(args), rootDir: args.root });
   const rel = path.relative(args.root, outDirOf(args));
   const moves = [];
+  let unreadable = 0;
   for (const [file, key] of [["design-budgets.json", "budgets"], ["visual-system.thresholds.json", "thresholds"]] as const) {
     const before = gitShow(args.root, args.base, path.join(rel, file));
     if (before === null) {
       out(`UNKNOWN ${file} is not readable at ${args.base}; nothing to compare`);
+      unreadable++;
       continue;
     }
     const base = (JSON.parse(before) as Record<string, ThresholdEntry[]>)[key] ?? [];
@@ -171,9 +178,11 @@ async function diffCommand(args: Args, out: Out): Promise<number> {
     moves.push(...compareBounds(base, now));
   }
   for (const m of moves) out(formatMove(m));
-  if (moves.length === 0) out("design-kit: no loosened budget or threshold");
+  if (unreadable > 0) out(`design-kit: ${unreadable} of 2 files not compared; a missing baseline is UNKNOWN, not a clean diff`);
+  else if (moves.length === 0) out("design-kit: no loosened budget or threshold");
   const summary = process.env["GITHUB_STEP_SUMMARY"];
-  if (summary) fs.appendFileSync(summary, stepSummary(args.base, moves));
+  if (summary) fs.appendFileSync(summary, stepSummary(args.base, moves, unreadable));
+  // D6: a loosening is marked, never failed, so the verb exits 0 whatever it finds.
   return 0;
 }
 
@@ -191,6 +200,10 @@ function lintCommand(args: Args, out: Out): number {
     }
   }
   const { files, findings } = lintDir(path.resolve(args.root, dir), exceptions);
+  if (files === 0) {
+    out(`design-kit lint-classes: no .tsx files under ${dir}; a check that read nothing is UNKNOWN, not clean`);
+    return 2;
+  }
   for (const f of findings) out(`${f.file}:${f.line}:${f.column} ${f.rule} ${f.match}`);
   out(`design-kit lint-classes: ${files} files, ${findings.length} findings`);
   return findings.length > 0 ? 1 : 0;
@@ -246,6 +259,7 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
   const { validateGuide } = await import("./validate/guide.js");
   const report = await validateGuide(path.resolve(args.root, guide), target, args.root);
   const errors = report.failures.filter((f) => f.severity === "error");
+  for (const id of report.unmatchedRules) out(`UNMATCHED ${id}: no element on the page answers to this rule`);
   for (const f of report.failures) out(`${f.severity.toUpperCase()} ${f.elementId} ${f.ruleId}: ${f.messages.join("; ")}`);
   out(`design-kit validate-guide: ${report.elements} elements, ${report.rules} rules, ${report.failures.length} failures (${report.instrument})`);
   return errors.length > 0 ? 1 : 0;
@@ -260,6 +274,11 @@ async function indexCommand(args: Args, out: Out): Promise<number> {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const kitDir = args.kitDir ? path.resolve(args.root, args.kitDir) : path.join(here, "kit");
   const body = generateIndex({ sourceDir: kitDir, entries: ALL, typescript: ts as typeof import("typescript") });
+  const unread = body.split("\n").filter((l) => l.startsWith("(no source found for"));
+  if (unread.length > 0) {
+    out(`design-kit: cannot read the kit's props from ${kitDir}: ${unread.join(" ")}\nan index that omits a contract is UNKNOWN, not current (pass --kit-dir)`);
+    return 2;
+  }
   const file = path.resolve(args.root, args.file ?? "CLAUDE.md");
   const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
   if (args.check) {

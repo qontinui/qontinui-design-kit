@@ -11,6 +11,8 @@ import { cellsOf } from "../dist/specimen/cells.js";
 import { checkStates } from "../dist/specimen/check-states.js";
 import { validateGuide } from "../dist/validate/guide.js";
 import { main } from "../dist/cli.js";
+import http from "node:http";
+import { serveDir } from "../dist/door/inject.js";
 import { ROOT } from "./helpers.js";
 import { compileJson, exampleJson, needDoor, tmpDir, writeSpecimen } from "./kit-helpers.js";
 
@@ -155,6 +157,47 @@ test("design-kit specimen writes the file and --check exits 1 after one byte cha
   }
 });
 
+test("check-states refuses a specimen that lists no cells instead of reporting zero findings", async () => {
+  const dir = tmpDir("nocells");
+  try {
+    const f = path.join(dir, "s.html");
+    fs.writeFileSync(f, '<!doctype html><script type="application/json" id="dk-specimen-cells">[]</script>');
+    await assert.rejects(checkStates(f, ROOT), /lists no cells/);
+    fs.writeFileSync(f, "<!doctype html><p>not a specimen</p>");
+    await assert.rejects(checkStates(f, ROOT), /no #dk-specimen-cells block/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the page server does not serve a sibling directory that shares the root's prefix", async () => {
+  const parent = tmpDir("serve");
+  try {
+    fs.mkdirSync(path.join(parent, "b"));
+    fs.mkdirSync(path.join(parent, "bc"));
+    fs.writeFileSync(path.join(parent, "b", "ok.html"), "ok");
+    fs.writeFileSync(path.join(parent, "bc", "secret.txt"), "secret");
+    const server = await serveDir(path.join(parent, "b"));
+    try {
+      const get = (p) =>
+        new Promise((resolve) => {
+          const u = new URL(server.url);
+          http.get({ host: u.hostname, port: u.port, path: p }, (res) => {
+            res.resume();
+            res.on("end", () => resolve(res.statusCode));
+          });
+        });
+      assert.equal(await get("/ok.html"), 200);
+      assert.equal(await get("/../bc/secret.txt"), 404);
+      assert.equal(await get("/%E0%A4%A"), 400, "a malformed escape is a bad request, not a crash");
+    } finally {
+      await server.close();
+    }
+  } finally {
+    fs.rmSync(parent, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------- the state check (published exec door)
 
 let shippedRun;
@@ -289,6 +332,9 @@ test("validate-guide: the specimen conforms to its own generated guide; a hand-r
       `<!doctype html><html><head><style>${sp.outputs["tokens.css"]}</style></head><body><button id="hand" type="button" style="background-color:#ff0000;border-radius:7px">Go</button></body></html>`,
     );
     const bad = await validateGuide(guideFile, hand, ROOT);
+    // Rules no element answers to are listed, not passed.
+    assert.ok(bad.unmatchedRules.includes("tabs-states-declared"));
+    assert.deepEqual(clean.unmatchedRules, []);
     assert.deepEqual(bad.failures.map((f) => [f.elementId, f.ruleId]).sort(), [
       ["dom-hand", "border-radius-on-scale"],
       ["dom-hand", "button-state-declaration"],
@@ -300,6 +346,23 @@ test("validate-guide: the specimen conforms to its own generated guide; a hand-r
     const code = await main(["validate-guide", guideFile, hand, "--root", ROOT], (s) => lines.push(s));
     assert.equal(code, 1);
     assert.match(lines.at(-1), /^design-kit validate-guide: 1 elements, 14 rules, 4 failures \(@qontinui\/ui-bridge-wrapper@0\.12\.0\)$/);
+  } finally {
+    sp.cleanup();
+  }
+});
+
+test("validate-guide: a page with no registered elements is unknown (exit 3), never a pass", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const sp = await writeSpecimen({ name: "empty-page" });
+  try {
+    const guideFile = path.join(sp.dir, "guide.json");
+    fs.writeFileSync(guideFile, sp.outputs["design-kit-specimen.styleguide.uibridge.json"]);
+    const empty = path.join(sp.dir, "empty.html");
+    fs.writeFileSync(empty, "<!doctype html><html><head></head><body></body></html>");
+    const lines = [];
+    const code = await main(["validate-guide", guideFile, empty, "--root", ROOT], (s) => lines.push(s));
+    assert.equal(code, 3);
+    assert.match(lines[0], /^design-kit: unknown\((no-elements|instrument-cannot-read)\)/);
   } finally {
     sp.cleanup();
   }

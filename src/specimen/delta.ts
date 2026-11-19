@@ -116,11 +116,12 @@ export const TOKEN_VALUES_EXPRESSION = `(() => {
     }
   }
   const host = document.createElement('div');
-  host.style.cssText = 'position:absolute;left:-9999px;top:0;color:rgb(1, 2, 3);border-style:solid';
+  host.style.cssText = 'position:absolute;left:-9999px;top:0;color:rgb(1, 2, 3)';
   document.body.appendChild(host);
   const probe = document.createElement('div');
+  probe.style.cssText = 'border-style:solid;outline-style:solid';
   host.appendChild(probe);
-  const props = ['color', 'backgroundColor', 'width', 'borderTopWidth', 'outlineWidth', 'fontSize', 'transitionDuration', 'lineHeight', 'fontWeight'];
+  const props = ['color', 'backgroundColor', 'width', 'borderTopWidth', 'outlineWidth', 'fontSize', 'transitionDuration', 'lineHeight', 'fontWeight', 'opacity', 'letterSpacing', 'boxShadow', 'transform'];
   const base = {};
   for (const p of props) { probe.style[p] = 'var(--dk-nonexistent-probe)'; base[p] = getComputedStyle(probe)[p]; probe.style[p] = ''; }
   const values = new Set();

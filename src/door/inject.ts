@@ -58,14 +58,26 @@ export function runDoor(rootDir: string, url: string, steps: DoorStep[], opts: {
     const timer = setTimeout(() => child.kill("SIGKILL"), opts.timeoutMs ?? 180_000);
     child.stdout.on("data", (d: Buffer) => (stdout += d));
     child.stderr.on("data", (d: Buffer) => (stderr += d));
-    child.on("close", (code) => {
+    let settled = false;
+    const settle = (code: number | null, extra = ""): void => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      const lines = stdout
-        .split("\n")
-        .filter((l) => l.startsWith("{"))
-        .map((l) => JSON.parse(l) as DoorLine);
-      resolve({ ok: code === 0, lines, stderr, code, instrument });
-    });
+      const lines: DoorLine[] = [];
+      for (const l of stdout.split("\n")) {
+        if (!l.startsWith("{")) continue;
+        try {
+          lines.push(JSON.parse(l) as DoorLine);
+        } catch {
+          // A truncated or non-JSON line (a log line, a run killed by the timeout) is not an answer.
+          stderr += `\nunparsed door line: ${l.slice(0, 80)}`;
+        }
+      }
+      resolve({ ok: code === 0, lines, stderr: stderr + extra, code, instrument });
+    };
+    child.on("error", (e) => settle(null, `\nspawn failed: ${e.message}`));
+    child.on("close", (code) => settle(code));
+    child.stdin.on("error", () => undefined);
     child.stdin.end(steps.map((s) => JSON.stringify(s)).join("\n") + "\n");
   });
 }
@@ -77,8 +89,17 @@ export function serveDir(dir: string): Promise<{ url: string; close: () => Promi
   const root = path.resolve(dir);
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
-      const file = path.join(root, decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/"));
-      if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+      let rel: string;
+      try {
+        rel = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/");
+      } catch {
+        res.statusCode = 400;
+        res.end("bad request");
+        return;
+      }
+      const file = path.join(root, rel);
+      const inside = path.relative(root, file);
+      if (inside.startsWith("..") || path.isAbsolute(inside) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
         res.statusCode = 404;
         res.end("not found");
         return;

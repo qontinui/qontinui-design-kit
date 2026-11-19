@@ -22,7 +22,7 @@ export interface Finding {
   match: string;
 }
 
-const ARBITRARY_VALUE = /[^\s'"`{}()<>,;]*-\[[^\]\s'"`]+\][^\s'"`{}()<>,;]*/g;
+const ARBITRARY_VALUE = /(?<![^\s'"`{}()<>,;])[^\s'"`{}()<>,;]*-\[[^\]\s'"`]+\][^\s'"`{}()<>,;]*/g;
 const ARBITRARY_VARIANT = /(?<=^|[\s'"`])\[[^\]\s]+\]:[^\s'"`]+/g;
 const COLOUR_HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b/g;
 const COLOUR_FN = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/g;

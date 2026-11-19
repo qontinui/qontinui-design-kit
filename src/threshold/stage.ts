@@ -85,6 +85,9 @@ export function loadEvidence(file: string): Evidence {
     if (typeof o.check !== "string" || typeof o.check_version !== "string" || typeof o.failed !== "boolean") {
       throw new Error(`${file}: a record needs check, check_version and failed`);
     }
+    if (typeof o.injected_violation !== "string" || o.injected_violation.trim() === "") {
+      throw new Error(`${file}: the record for ${o.check} names no injected_violation; a failure that shows nothing is not a record`);
+    }
     out.push({
       check: o.check,
       check_version: o.check_version,

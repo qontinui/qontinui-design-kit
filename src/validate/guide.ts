@@ -24,6 +24,8 @@ export interface GuideReport {
   elements: number;
   rules: number;
   failures: GuideFailure[];
+  /** Rules that matched no element on the page: not a failure, but not a pass either. */
+  unmatchedRules: string[];
   instrument: string;
 }
 
@@ -96,11 +98,22 @@ export function readGuide(file: string): StyleGuideConfig {
 
 /** Run `validateElement` over elements; used by the CLI and, with synthetic elements, by the tests. */
 export async function validateElements(guide: StyleGuideConfig, rules: StyleRule[], elements: unknown[]): Promise<GuideFailure[]> {
+  return (await validateElementsDetailed(guide, rules, elements)).failures;
+}
+
+/** As `validateElements`, and which rules matched at least one element. */
+export async function validateElementsDetailed(
+  guide: StyleGuideConfig,
+  rules: StyleRule[],
+  elements: unknown[],
+): Promise<{ failures: GuideFailure[]; matched: Set<string> }> {
   const specs = await import("@qontinui/ui-bridge/specs");
   const failures: GuideFailure[] = [];
+  const matched = new Set<string>();
   for (const el of elements) {
     const results = specs.validateElement(el as Parameters<typeof specs.validateElement>[0], rules as Parameters<typeof specs.validateElement>[1], guide.tokens as Parameters<typeof specs.validateElement>[2]);
     for (const r of results) {
+      matched.add(r.ruleId);
       if (r.passed) continue;
       failures.push({
         elementId: r.elementId,
@@ -110,7 +123,7 @@ export async function validateElements(guide: StyleGuideConfig, rules: StyleRule
       });
     }
   }
-  return failures;
+  return { failures, matched };
 }
 
 export async function validateGuide(guideFile: string, target: string, rootDir: string): Promise<GuideReport> {
@@ -128,12 +141,14 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
     if (!snap?.elements || !Array.isArray(canon)) {
       throw new Error(`unknown(instrument-cannot-read): ${run.instrument} gave no design snapshot (${run.stderr.slice(0, 160).replace(/\s+/g, " ")})`);
     }
+    if (snap.elements.length === 0) throw new Error("unknown(no-elements): the page returned no registered elements; a guide that read nothing is not a pass");
     if (snap.truncated) throw new Error("unknown(snapshot-truncated): the page has more elements than one snapshot returns");
     const map = new Map<string, string>();
     pairs.forEach(([p, v], i) => map.set(`${p}\0${v}`, String(canon[i])));
     const rules = applyCanonical(guide.rules, map);
-    const failures = await validateElements(guide, rules, snap.elements);
-    return { guide: guideFile, elements: snap.elements.length, rules: rules.length, failures, instrument: run.instrument };
+    const { failures, matched } = await validateElementsDetailed(guide, rules, snap.elements);
+    const unmatchedRules = rules.map((r) => r.id).filter((id) => !matched.has(id));
+    return { guide: guideFile, elements: snap.elements.length, rules: rules.length, failures, unmatchedRules, instrument: run.instrument };
   } finally {
     await page.close();
   }

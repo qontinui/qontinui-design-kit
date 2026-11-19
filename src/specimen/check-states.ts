@@ -95,6 +95,7 @@ export async function checkStates(target: string, rootDir: string): Promise<Stat
   const page = await openPage(target);
   try {
     const cells = await fetchCells(page.url);
+    if (cells.length === 0) throw new Error(`${target}: the specimen lists no cells; a check that measured nothing is UNKNOWN, not complete`);
     const steps: DoorStep[] = [{ action: "discover", payload: {} }];
     const stepOf = new Map<string, number>();
     for (const c of cells) {
@@ -147,7 +148,12 @@ export async function checkStates(target: string, rootDir: string): Promise<Stat
       }
       let diffs: Diff[];
       if ((FORCEABLE_STATES as readonly string[]).includes(c.state)) {
-        diffs = states.find((x) => x.state === c.state)?.diffFromDefault ?? [];
+        const forced = states.find((x) => x.state === c.state);
+        if (!forced) {
+          results.push(unknownCell(c, `unknown(state-not-forced): the door returned no ${c.state} entry`));
+          continue;
+        }
+        diffs = forced.diffFromDefault;
       } else {
         const base = defaultStyles.get(`${c.component}/${c.variant}`);
         const own = states.find((x) => x.state === "default");

@@ -48,10 +48,11 @@ export function formatMove(m: Move): string {
   return `${m.kind} ${m.check} ${m.from} -> ${m.to}${m.note ? ` (${m.note})` : ""}`;
 }
 
-export function stepSummary(base: string, moves: Move[]): string {
+export function stepSummary(base: string, moves: Move[], unreadable = 0): string {
   const loosened = moves.filter((m) => m.kind === "LOOSENED");
   const lines = [`### design-kit: bounds changed against \`${base}\``, ""];
-  if (moves.length === 0) lines.push("No budget or threshold moved.");
+  if (unreadable > 0) lines.push(`${unreadable} of 2 files could not be read at the base: not compared (UNKNOWN, not a clean diff).`);
+  if (moves.length === 0 && unreadable === 0) lines.push("No budget or threshold loosened.");
   else lines.push(...moves.map((m) => `- \`${formatMove(m)}\``));
   lines.push("", `${loosened.length} loosened. A loosened check returns to \`draft\` (its \`check_version\` changed). Marked, not failed.`, "");
   return lines.join("\n");

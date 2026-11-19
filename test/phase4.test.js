@@ -184,7 +184,11 @@ test("removing a bound is LOOSENED; an unreadable base is UNKNOWN, still exit 0"
     const lines = [];
     const code = await main(["diff", "--base", "HEAD", "--root", c.dir], (s) => lines.push(s));
     assert.equal(code, 0);
-    assert.equal(lines[0], "UNKNOWN design-budgets.json is not readable at HEAD; nothing to compare");
+    assert.deepEqual(lines, [
+      "UNKNOWN design-budgets.json is not readable at HEAD; nothing to compare",
+      "UNKNOWN visual-system.thresholds.json is not readable at HEAD; nothing to compare",
+      "design-kit: 2 of 2 files not compared; a missing baseline is UNKNOWN, not a clean diff",
+    ]);
   } finally {
     c.cleanup();
   }
@@ -193,6 +197,23 @@ test("removing a bound is LOOSENED; an unreadable base is UNKNOWN, still exit 0"
 test("compareBounds names a change in a bound with no declared direction MOVED, never LOOSENED", () => {
   const e = (value) => ({ check: "thresholds.weird", value, bound: "none", source: "draft", source_detail: "authored", check_version: "x", stage: "draft" });
   assert.deepEqual(compareBounds([e(1)], [e(2)]), [{ kind: "MOVED", check: "thresholds.weird", from: "1", to: "2", note: "direction not declared" }]);
+});
+
+test("a diff with a base that begins with a dash is refused, not passed to git as an option", async () => {
+  const lines = [];
+  assert.equal(await main(["diff", "--base", "-x"], (s) => lines.push(s)), 2);
+  assert.match(lines[0], /diff needs --base <ref>/);
+});
+
+test("an evidence record that names no injected violation is refused", async () => {
+  const c = await compileJson(exampleJson(), "evidence");
+  try {
+    fs.writeFileSync(path.join(c.dir, "design", "threshold-evidence.json"), JSON.stringify({ records: [{ check: "x", check_version: "738ac6e6b20a4560", failed: true }] }));
+    const { compileSource } = await import("../dist/index.js");
+    await assert.rejects(compileSource({ sourcePath: c.sourcePath, rootDir: c.dir }), /names no injected_violation/);
+  } finally {
+    c.cleanup();
+  }
 });
 
 // ---------------------------------------------------------------- guide
@@ -353,12 +374,33 @@ test("design-kit lint-classes exits 1 on a seeded violation and 0 on a conformin
   }
 });
 
+test("lint-classes on a directory with no .tsx files and an unexpected extra argument are refused, not reported clean", async () => {
+  const dir = tmpDir("lint-empty");
+  try {
+    const lines = [];
+    assert.equal(await main(["lint-classes", ".", "--root", dir], (s) => lines.push(s)), 2);
+    assert.match(lines[0], /no \.tsx files under \./);
+    const more = [];
+    assert.equal(await main(["compile", "stray", "--root", dir], (s) => more.push(s)), 2);
+    assert.match(more[0], /unexpected argument stray/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a long delimiter-free run does not hang the arbitrary-value scan", () => {
+  const start = Date.now();
+  lintText("big.tsx", `const x = "${"a-".repeat(60000)}";\n`, new Set());
+  assert.ok(Date.now() - start < 2000, "the scan is linear in the line length");
+});
+
 test("the kit's own tsx sources pass lint-classes (the check is shipped to the template, so the kit is its first user)", async () => {
   const { lintDir } = await import("../dist/index.js");
   const { ROOT } = await import("./helpers.js");
   const r = lintDir(path.join(ROOT, "src"), new Set());
   assert.deepEqual(r.findings, []);
-  assert.equal(r.files, 11);
+  assert.equal(r.files, fs.readdirSync(path.join(ROOT, "src"), { recursive: true }).filter((f) => f.endsWith(".tsx")).length);
+  assert.ok(r.files > 0);
 });
 
 void tmpDir;

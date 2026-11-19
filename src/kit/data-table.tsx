@@ -65,6 +65,8 @@ export function DataTable<T>({ columns, rows, rowKey, selectedKey, onRowClick, c
               onKeyDown={
                 onRowClick
                   ? (e) => {
+                      // A control inside a cell keeps its own keyboard activation.
+                      if (e.target !== e.currentTarget) return;
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         onRowClick(row);
