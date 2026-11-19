@@ -1,0 +1,9 @@
+<!doctype html><html><head><style>
+:root{--x:#123456;--y:#abcdef}
+#b{background:var(--y);color:#000;border:1px solid #000;padding:4px}
+#b:hover{background:var(--x);color:#fff}
+#b:active{background:#222}
+#b:focus-visible{outline:2px solid var(--x)}
+#b:disabled{opacity:.5}
+#plain{background:#eee;border:1px solid #000}
+</style></head><body><button id="b" type="button">Go</button><button id="plain" type="button">Plain</button></body></html>

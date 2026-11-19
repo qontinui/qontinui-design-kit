@@ -1,0 +1,7 @@
+@import "tailwindcss" source(none);
+@source "./content.html";
+@theme {
+  --*: initial;
+  --color-surface: #fafafa;
+  --spacing: 4px;
+}
