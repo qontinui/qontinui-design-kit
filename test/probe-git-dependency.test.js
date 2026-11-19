@@ -1,7 +1,7 @@
 // Probe 2 (plan Phase 1): does `npm install github:<owner>/<repo>#<sha>` of a
 // package whose `prepare` script builds dist/ yield an importable package?
 //
-// The test installs through a git URL of this checkout's HEAD commit (a local
+// The test installs through a git URL of a one-commit copy of HEAD's tracked tree (a local
 // file transport, so it holds before anything is pushed); the real GitHub
 // install is run once per sha when the record in README.md is made. A tracked
 // dist/ is NOT needed when this passes (the fallback arm is unused).
@@ -16,15 +16,19 @@ import { ROOT } from "./helpers.js";
 test("git dependency: prepare builds dist/ and the package imports with a bin", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dk-probe2-"));
   try {
-    const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
-    assert.match(sha, /^[0-9a-f]{40}$/);
-    // A private repo holding exactly the HEAD commit: a detached CI merge
-    // commit is not reachable from any branch, so a plain clone could miss it.
+    // A one-commit repo holding exactly the tracked tree of HEAD. (A CI checkout is
+    // shallow, so its own history cannot be served to a clone; the mechanism
+    // under test is a git dependency whose package builds in `prepare`.)
     const src = path.join(tmp, "src");
-    execFileSync("git", ["init", "-q", src]);
-    execFileSync("git", ["-C", src, "fetch", "-q", ROOT, sha]);
-    execFileSync("git", ["-C", src, "checkout", "-q", "--detach", sha]);
-    // A branch named for the sha so `npm install git+file://...#<sha>` resolves.
+    fs.mkdirSync(src);
+    const archive = execFileSync("git", ["archive", "HEAD"], { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 });
+    execFileSync("tar", ["-x", "-C", src], { input: archive });
+    const git = (...args) => execFileSync("git", ["-c", "user.name=probe", "-c", "user.email=probe@example.invalid", ...args], { cwd: src, encoding: "utf8" });
+    git("init", "-q");
+    git("add", "-A");
+    git("commit", "-q", "-m", "probe");
+    const sha = git("rev-parse", "HEAD").trim();
+    assert.match(sha, /^[0-9a-f]{40}$/);
     const consumer = path.join(tmp, "consumer");
     fs.mkdirSync(consumer);
     fs.writeFileSync(path.join(consumer, "package.json"), JSON.stringify({ name: "consumer", version: "1.0.0", type: "module" }));
