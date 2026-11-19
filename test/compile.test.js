@@ -25,6 +25,7 @@ test("a declared colour emits a variable; an undeclared type scale emits no valu
     assert.match(outputs["tokens.css"], /--dk-color-role-surface: #101014;/);
     assert.doesNotMatch(outputs["tokens.css"], /--dk-type-scale/);
     assert.doesNotMatch(outputs["tokens.css"], /--dk-font-/);
+    assert.match(outputs["tokens.css"], /--dk-type-family-sans: system-ui;/, "the undeclared family is a platform keyword, not a face");
     assert.equal(report.groups.color.state, "declared");
     assert.equal(report.groups.type.state, "undeclared");
     assert.deepEqual(
@@ -98,6 +99,19 @@ test("an authored hue is refused and the refusal names the clause", async () => 
   } finally {
     p.cleanup();
   }
+});
+
+test("identity is refused at the group path itself and derived needs a dimension", () => {
+  assert.throws(() => parseSource({ type: { family: leaf("fontFamily", "Inter", "authored(f-1)") } }), (e) => e.message.includes("type.family") && e.message.includes(CLAUSE));
+  assert.throws(() => parseSource({ imagery: { style: leaf("string", "flat", "authored(f-1)") } }), (e) => e.message.includes(CLAUSE));
+  const d = { $extensions: { qontinui: { source: "derived(modular-scale)", derive: { rule: "modular-scale", from: 1, ratio: 2, step: 1 } } } };
+  assert.throws(() => parseSource({ color: { x: { ...d, $type: "color" } } }), (e) => e.message.includes("must be a dimension"));
+});
+
+test("a flag without a value is a usage error, not the cwd", async () => {
+  const lines = [];
+  assert.equal(await main(["compile", "--out"], (s) => lines.push(s)), 2);
+  assert.match(lines.join("\n"), /--out needs a value/);
 });
 
 test("authored is refused on every identity group: colour, type family, imagery style", () => {

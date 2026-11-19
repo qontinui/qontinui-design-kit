@@ -91,6 +91,7 @@ async function mergeImports(source: DesignSource, ctx: LoadContext, report: Pick
         continue;
       }
       leaves.push(l);
+      stated.add(l.path);
     }
   }
   report.imports_shadowed.sort();

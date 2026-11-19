@@ -95,7 +95,8 @@ export interface DesignSource {
  * imagery style. The compiler refuses `authored(...)` on them (plan D2).
  */
 export function isIdentityPath(path: string): boolean {
-  return path.startsWith("color.") || path.startsWith("type.family.") || path.startsWith("imagery.style.");
+  const under = (prefix: string): boolean => path === prefix || path.startsWith(prefix + ".");
+  return under("color") || under("type.family") || under("imagery.style");
 }
 
 /** The policy clause an identity refusal names. */

@@ -161,7 +161,7 @@ function walk(
         break;
       case "derived":
         if (hasValue) problems.push(`leaf ${dotted}: a derived leaf states its rule, not a $value`);
-        if (type === null) problems.push(`leaf ${dotted}: a derived leaf needs a $type (dimension)`);
+        if (type !== "dimension") problems.push(`leaf ${dotted}: a derived leaf must be a dimension`);
         derive = parseDerive(dotted, ext?.["derive"], problems);
         if (derive) {
           value = deriveValue(derive);

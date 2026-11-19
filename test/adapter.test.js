@@ -151,6 +151,10 @@ test("an unsupported import package is refused; an installed package that is abs
   }
 });
 
+test("a ref that git could read as an option is refused before any git command runs", async () => {
+  await assert.rejects(loadTokenPackage({ package: "@qontinui/design-tokens", ref: "--upload-pack=x", groups: null }, ctx(process.cwd())), /not a sha or a tag/);
+});
+
 test("compile --check works for a source with resolved leaves", async () => {
   const p = mkProject(importing(["durations"]));
   const say = () => {};

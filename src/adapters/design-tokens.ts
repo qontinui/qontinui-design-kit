@@ -9,6 +9,7 @@
  * explicit undeclared leaf. It is never silently empty.
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -42,7 +43,15 @@ export interface LoadContext {
 
 function run(cmd: string, args: string[], cwd: string): string {
   try {
-    return execFileSync(cmd, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return execFileSync(cmd, args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 64 * 1024 * 1024,
+      timeout: 15 * 60 * 1000,
+      // Never wait on a credential prompt.
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    });
   } catch (e) {
     const err = e as { stderr?: string; message: string };
     throw new Error(`${cmd} ${args.join(" ")} failed in ${cwd}: ${(err.stderr ?? err.message).toString().slice(-600)}`);
@@ -51,9 +60,13 @@ function run(cmd: string, args: string[], cwd: string): string {
 
 /** Build the token package at `ref` (once per cache dir) and return its directory and commit sha. */
 function buildAtRef(ref: string, ctx: LoadContext): { dir: string; sha: string } {
+  // A ref is a sha or a tag: never something git could read as an option.
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(ref)) throw new Error(`import ref ${JSON.stringify(ref)} is not a sha or a tag`);
   const repo = ctx.tokensRepo ?? process.env["DESIGN_TOKENS_REPO"] ?? DEFAULT_REPO;
   const cache = ctx.cacheDir ?? process.env["DESIGN_KIT_CACHE"] ?? path.join(os.homedir(), ".cache", "qontinui-design-kit");
-  const dir = path.join(cache, `design-tokens-${ref.replace(/[^A-Za-z0-9._-]/g, "_")}`);
+  // The key covers the repo as well as the ref: another repo at the same ref is another build.
+  const key = createHash("sha256").update(`${repo}\0${ref}`).digest("hex").slice(0, 16);
+  const dir = path.join(cache, `design-tokens-${key}`);
   const marker = path.join(dir, ".design-kit-sha");
   if (fs.existsSync(path.join(dir, "dist", "index.js")) && fs.existsSync(marker)) {
     return { dir, sha: fs.readFileSync(marker, "utf8").trim() };

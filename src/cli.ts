@@ -27,12 +27,18 @@ interface Args {
 
 export function parseArgs(argv: string[]): Args {
   const a: Args = { command: null, check: false, root: process.cwd(), source: "design/language.dtcg.json", out: "src/design" };
-  for (let i = 0; i < argv.length; i++) {
+  let i = 0;
+  const value = (flag: string): string => {
+    const next = argv[++i];
+    if (next === undefined || next === "" || next.startsWith("--")) throw new Error(`${flag} needs a value`);
+    return next;
+  };
+  for (i = 0; i < argv.length; i++) {
     const v = argv[i] as string;
     if (v === "--check") a.check = true;
-    else if (v === "--root") a.root = path.resolve(argv[++i] ?? "");
-    else if (v === "--source") a.source = argv[++i] ?? "";
-    else if (v === "--out") a.out = argv[++i] ?? "";
+    else if (v === "--root") a.root = path.resolve(value(v));
+    else if (v === "--source") a.source = value(v);
+    else if (v === "--out") a.out = value(v);
     else if (v.startsWith("-")) throw new Error(`unknown option ${v}`);
     else if (a.command === null) a.command = v;
     else throw new Error(`unexpected argument ${v}`);
