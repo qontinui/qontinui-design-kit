@@ -39,14 +39,15 @@ export function outOfBand(entries: Entry[], source: DesignSource): OutOfBand[] {
     if (r && !r.ok) out.push({ path: `${fg} on ${ground}`, check: "contrast", value: Math.round(r.value * 1000) / 1000, band: bandText("contrast") });
   }
 
-  const shadows = entries.filter((e) => e.path.startsWith("space.depth.") && typeof e.value === "object" && e.value !== null);
-  const offsets = shadows.map((s) => {
-    const v = s.value as Record<string, unknown>;
-    const num = (x: unknown): number => (isMeasured(x) ? x.value : typeof x === "number" ? x : 0);
-    return { offsetX: num(v["offsetX"]), offsetY: num(v["offsetY"]) };
-  });
-  if (shadows.length > 1 && !singleLightSource(offsets)) {
-    out.push({ path: "space.depth", check: "single-light-source", value: shadows.length, band: "one light source" });
+  // Every layer of every shadow, an array shadow's layers included; a string layer states no readable offset.
+  const layers = entries
+    .filter((e) => e.path.startsWith("space.depth."))
+    .flatMap((e) => (Array.isArray(e.value) ? e.value : [e.value]))
+    .filter((v): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v));
+  const num = (x: unknown): number => (isMeasured(x) ? x.value : typeof x === "number" ? x : 0);
+  const offsets = layers.map((v) => ({ offsetX: num(v["offsetX"]), offsetY: num(v["offsetY"]) }));
+  if (layers.length > 1 && !singleLightSource(offsets)) {
+    out.push({ path: "space.depth", check: "single-light-source", value: layers.length, band: "one light source" });
   }
   return out.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }

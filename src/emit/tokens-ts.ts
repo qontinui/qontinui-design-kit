@@ -22,7 +22,8 @@ function nest(entries: Entry[], pick: (e: Entry) => string): Tree {
 
 /** `tokens.ts`: typed constants. `tokens` holds values, `vars` the `var(--dk-*)` reads, `identity` D3's state. */
 export function emitTokensTs(entries: Entry[], identity: "declared" | "undeclared", undeclared: string[]): string {
-  const tokens = nest(entries, (e) => e.css);
+  // `tokens` holds values (every alias resolved); `vars` the reads that follow a runtime change.
+  const tokens = nest(entries, (e) => e.resolvedCss);
   const vars = nest(entries, (e) => `var(${varName(e.path)})`);
   return [
     `// ${GENERATED_HEADER}`,

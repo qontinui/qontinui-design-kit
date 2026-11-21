@@ -87,7 +87,8 @@ function under(entries: Entry[], prefix: string): Entry[] {
 
 const nameAfter = (e: Entry, prefix: string): string => e.path.slice(prefix.length).split(".").map(kebab).join("-");
 
-function record(entries: Entry[], prefix: string, map: (e: Entry) => string = (e) => canonical(e.css)): Record<string, string> {
+/** The guide states resolved values: a shadow whose colour is an alias lists the colour, not its variable. */
+function record(entries: Entry[], prefix: string, map: (e: Entry) => string = (e) => canonical(e.resolvedCss)): Record<string, string> {
   const out: Record<string, string> = {};
   for (const e of under(entries, prefix)) out[nameAfter(e, prefix)] = map(e);
   return out;

@@ -3,6 +3,7 @@ import path from "node:path";
 import { TOKEN_PACKAGE, loadTokenPackage, tokenLeaves, type LoadContext } from "../adapters/design-tokens.js";
 import { budgetEntries, emitBudgets, emitThresholds } from "../emit/budgets.js";
 import { emitGuide, guideFileName } from "../emit/guide.js";
+import { varName } from "../emit/names.js";
 import { emitTheme } from "../emit/theme.js";
 import { loadEvidence } from "../threshold/stage.js";
 import { emitTokensCss } from "../emit/tokens-css.js";
@@ -107,26 +108,86 @@ async function mergeImports(source: DesignSource, ctx: LoadContext, report: Pick
   return leaves;
 }
 
-/** Resolve `{a.b}` aliases (cycle-checked) and render every value-bearing leaf. */
+/** An alias written inside a longer string (`0 0 12px {color.glow.primary}`). */
+const EMBEDDED_ALIAS = /\{[^{}\s]+\}/;
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** A leaf's value with every alias resolved, and the spelling `tokens.css` writes (a composite field alias as its variable). */
+interface Resolved {
+  value: unknown;
+  css: unknown;
+}
+
+/**
+ * Resolve `{a.b}` aliases (cycle-checked) and render every value-bearing leaf.
+ * A whole `$value` may be an alias, and so may each field of a composite value
+ * (each field of a shadow object, each element of a shadow array). An alias
+ * that names no leaf, an undeclared leaf, or a leaf that emits no variable is
+ * refused; so is an alias embedded in a longer string, which would otherwise
+ * reach the CSS as literal `{a.b}` text.
+ */
 function entriesFor(leaves: Leaf[]): Entry[] {
   const byLeaf = new Map(leaves.map((l) => [l.path, l]));
-  const resolve = (l: Leaf, trail: string[]): unknown => {
-    const target = aliasTarget(l.value);
-    if (target === null) return l.value;
+  const targetOf = (owner: string, name: string): Leaf => {
+    const t = byLeaf.get(name);
+    if (!t) throw new SourceError([`leaf ${owner}: alias {${name}} names no leaf`]);
+    if (t.source.kind === "undeclared") throw new SourceError([`leaf ${owner}: alias {${name}} points at an undeclared leaf`]);
+    return t;
+  };
+  const resolveLeaf = (l: Leaf, trail: string[]): Resolved => {
     if (trail.includes(l.path)) throw new SourceError([`alias cycle: ${[...trail, l.path].join(" -> ")}`]);
-    const t = byLeaf.get(target);
-    if (!t) throw new SourceError([`leaf ${l.path}: alias {${target}} names no leaf`]);
-    if (t.source.kind === "undeclared") throw new SourceError([`leaf ${l.path}: alias {${target}} points at an undeclared leaf`]);
-    return resolve(t, [...trail, l.path]);
+    const next = [...trail, l.path];
+    const whole = aliasTarget(l.value);
+    if (whole !== null) return resolveLeaf(targetOf(l.path, whole), next);
+    return resolveParts(l.value, l, next, true);
+  };
+  const resolveParts = (v: unknown, owner: Leaf, trail: string[], top: boolean): Resolved => {
+    if (Array.isArray(v)) {
+      const parts = v.map((x) => resolveParts(x, owner, trail, false));
+      return { value: parts.map((p) => p.value), css: parts.map((p) => p.css) };
+    }
+    if (isPlainObject(v)) {
+      const value: Record<string, unknown> = {};
+      const css: Record<string, unknown> = {};
+      for (const [k, x] of Object.entries(v)) {
+        const r = resolveParts(x, owner, trail, false);
+        value[k] = r.value;
+        css[k] = r.css;
+      }
+      return { value, css };
+    }
+    if (typeof v !== "string") return { value: v, css: v };
+    const field = top ? null : aliasTarget(v);
+    if (field !== null) {
+      const t = targetOf(owner.path, field);
+      if (!EMITTED_GROUPS.includes(t.group)) {
+        throw new SourceError([`leaf ${owner.path}: alias {${field}} names a leaf in ${t.group}, which emits no CSS variable to read`]);
+      }
+      return { value: resolveLeaf(t, trail).value, css: `var(${varName(t.path)})` };
+    }
+    // A `string` leaf is free text; any other value cannot carry an alias inside a longer string.
+    if ((owner.type !== "string" || !top) && EMBEDDED_ALIAS.test(v)) {
+      throw new SourceError([`leaf ${owner.path}: an alias may be a whole value or a whole field of a composite value, not embedded in a string: ${JSON.stringify(v)}`]);
+    }
+    return { value: v, css: v };
   };
   const out: Entry[] = [];
   for (const l of leaves) {
     if (l.source.kind === "undeclared" || !EMITTED_GROUPS.includes(l.group)) continue;
-    const value = resolve(l, []);
+    const r = resolveLeaf(l, []);
     // An alias takes the type of its target when it states none.
     let type = l.type;
     if (type === null && aliasTarget(l.value) !== null) type = byLeaf.get(aliasTarget(l.value) as string)?.type ?? null;
-    out.push({ path: l.path, group: l.group, type, value, css: cssValue({ path: l.path, type, value }), origin: "leaf" });
+    out.push({
+      path: l.path,
+      group: l.group,
+      type,
+      value: r.value,
+      css: cssValue({ path: l.path, type, value: r.css }),
+      resolvedCss: cssValue({ path: l.path, type, value: r.value }),
+      origin: "leaf",
+    });
   }
   return out;
 }
@@ -141,7 +202,7 @@ function identityFallbacks(entries: Entry[]): Entry[] {
   const have = new Set(entries.map((e) => e.path));
   const out: Entry[] = [];
   const add = (p: string, group: GroupName, type: Entry["type"], css: string): void => {
-    out.push({ path: p, group, type, value: css, css, origin: "system-fallback" });
+    out.push({ path: p, group, type, value: css, css, resolvedCss: css, origin: "system-fallback" });
   };
   for (const r of COLOR_ROLES) {
     const p = `color.role.${r.name}`;

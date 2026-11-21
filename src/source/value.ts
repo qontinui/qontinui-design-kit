@@ -26,7 +26,25 @@ function fontFamily(v: unknown): string {
   return (v as string[]).map((n) => (/[\s"]/.test(n) ? JSON.stringify(n) : n)).join(", ");
 }
 
-/** The CSS spelling of a leaf's (alias-resolved) value. Throws on a value that has no CSS form. */
+/**
+ * One shadow layer: `[inset] offsetX offsetY blur spread color` (DTCG 2025.10
+ * shadow fields). A string layer is an already-formed CSS shadow.
+ */
+function shadowLayer(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("a shadow layer is an object or a string");
+  const s = v as Record<string, unknown>;
+  if (s["inset"] !== undefined && typeof s["inset"] !== "boolean") throw new Error("inset must be true or false");
+  if (typeof s["color"] !== "string") throw new Error("a shadow layer needs a color");
+  const parts = [measured(s["offsetX"]), measured(s["offsetY"]), measured(s["blur"]), measured(s["spread"] ?? "0px"), s["color"]];
+  return (s["inset"] === true ? "inset " : "") + parts.join(" ");
+}
+
+/**
+ * The CSS spelling of a leaf's value. Throws on a value that has no CSS form.
+ * The compiler passes it twice: once with each composite-field alias as its
+ * `var(--dk-*)` read (tokens.css), once with every alias resolved (the guide).
+ */
 export function cssValue(leaf: Pick<Leaf, "type" | "value" | "path">): string {
   const { type, value } = leaf;
   try {
@@ -41,9 +59,12 @@ export function cssValue(leaf: Pick<Leaf, "type" | "value" | "path">): string {
       case "fontFamily":
         return fontFamily(value);
       case "shadow": {
-        const s = value as Record<string, unknown>;
-        if (typeof value === "string") return value;
-        return [measured(s["offsetX"]), measured(s["offsetY"]), measured(s["blur"]), measured(s["spread"] ?? "0px"), String(s["color"])].join(" ");
+        // A list of layers is one comma-separated box-shadow.
+        if (Array.isArray(value)) {
+          if (value.length === 0) throw new Error("an empty shadow list");
+          return value.map(shadowLayer).join(", ");
+        }
+        return shadowLayer(value);
       }
       default:
         if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
