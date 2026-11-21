@@ -84,9 +84,22 @@ export function runDoor(rootDir: string, url: string, steps: DoorStep[], opts: {
 
 const TYPES: Record<string, string> = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".json": "application/json" };
 
+/** A served page: its URL, how to stop serving it, and the stylesheet requests that 404'd. */
+export interface ServedPage {
+  url: string;
+  close: () => Promise<void>;
+  /**
+   * Every `.css` path the server answered 404, in request order, once each. A
+   * favicon, image or font 404 is not a stylesheet miss and is not listed.
+   * Always empty for a URL target (the kit does not serve it).
+   */
+  missed: () => string[];
+}
+
 /** Serve a directory over http on an ephemeral loopback port. */
-export function serveDir(dir: string): Promise<{ url: string; close: () => Promise<void> }> {
+export function serveDir(dir: string): Promise<ServedPage> {
   const root = path.resolve(dir);
+  const missed: string[] = [];
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
       let rel: string;
@@ -100,6 +113,7 @@ export function serveDir(dir: string): Promise<{ url: string; close: () => Promi
       const file = path.join(root, rel);
       const inside = path.relative(root, file);
       if (inside.startsWith("..") || path.isAbsolute(inside) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+        if (path.extname(rel).toLowerCase() === ".css" && !missed.includes(rel)) missed.push(rel);
         res.statusCode = 404;
         res.end("not found");
         return;
@@ -110,7 +124,7 @@ export function serveDir(dir: string): Promise<{ url: string; close: () => Promi
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
       const port = typeof addr === "object" && addr ? addr.port : 0;
-      resolve({ url: `http://127.0.0.1:${port}`, close: () => new Promise((r) => server.close(() => r())) });
+      resolve({ url: `http://127.0.0.1:${port}`, close: () => new Promise((r) => server.close(() => r())), missed: () => [...missed] });
     });
   });
 }
@@ -119,12 +133,12 @@ export function serveDir(dir: string): Promise<{ url: string; close: () => Promi
  * A page argument is a URL or a local file. A file is served from its own
  * directory so the check never needs a dev server.
  */
-export async function openPage(target: string): Promise<{ url: string; close: () => Promise<void> }> {
-  if (/^https?:\/\//.test(target)) return { url: target, close: async () => undefined };
+export async function openPage(target: string): Promise<ServedPage> {
+  if (/^https?:\/\//.test(target)) return { url: target, close: async () => undefined, missed: () => [] };
   const file = path.resolve(target);
   if (!fs.existsSync(file)) throw new Error(`not a URL and not a file: ${target}`);
   const server = await serveDir(path.dirname(file));
-  return { url: `${server.url}/${path.basename(file)}`, close: server.close };
+  return { url: `${server.url}/${path.basename(file)}`, close: server.close, missed: server.missed };
 }
 
 /** The value a `pageEvaluate` step returned, or undefined when it failed. */

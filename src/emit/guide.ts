@@ -53,10 +53,19 @@ export const guideFileName = (name: string): string => `${kebab(name)}.styleguid
 
 /**
  * The computed-style spelling of a value where it is statically known: a hex
- * colour is `rgb(r, g, b)` (or `rgba(...)`), a `rem` or `em` length is `px` at
- * the 16px root. Anything else (a platform keyword, `color-mix`) stays as the
- * source spells it; `design-kit validate-guide` canonicalises those through the
- * browser before it compares.
+ * colour is `rgb(r, g, b)` (or `rgba(...)`), and a `rem` length is `px` at the
+ * 16px root. An `em` length is returned as written: its px value depends on
+ * the font size of the element it is set on, which no root conversion knows
+ * (a `0.025em` tracking is `0.35px` on 14px text, not `0.4px`). Anything else
+ * (a platform keyword, `color-mix`) stays as the source spells it;
+ * `design-kit validate-guide` canonicalises those through the browser before
+ * it compares.
+ *
+ * No guide rule reads `letterSpacing` today. A future tracking rule must
+ * compare the element's computed `letterSpacing` divided by its computed
+ * `fontSize` against the em value, per element: the browser canonicalisation
+ * probe (`canonicalizeExpression` in `validate/guide.ts`) has no element font
+ * size, so it cannot turn an `em` constraint into the px an element computes.
  */
 export function canonical(css: string): string {
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(css.trim());
@@ -67,7 +76,7 @@ export function canonical(css: string): string {
     if (h.length === 8) return `rgba(${n(0)}, ${n(2)}, ${n(4)}, ${Math.round((n(6) / 255) * 1000) / 1000})`;
     return `rgb(${n(0)}, ${n(2)}, ${n(4)})`;
   }
-  const len = /^(-?\d*\.?\d+)(rem|em)$/.exec(css.trim());
+  const len = /^(-?\d*\.?\d+)rem$/.exec(css.trim());
   if (len) return `${Math.round(parseFloat(len[1] as string) * 16 * 1000) / 1000}px`;
   return css.trim();
 }

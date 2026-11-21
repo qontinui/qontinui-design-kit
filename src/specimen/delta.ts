@@ -6,6 +6,8 @@
  * literal that happens to equal a token value passes; one that equals none is
  * a non-token delta.
  */
+import { STATES_PROPERTY } from "../kit/style.js";
+
 export interface Diff {
   property: string;
   defaultValue: string;
@@ -104,6 +106,10 @@ export function visualDiff(base: Record<string, unknown>, other: Record<string, 
  * read through a probe element for each property a token can feed. A
  * declaration that is invalid for the property computes to its fallback, so a
  * value equal to that baseline is not taken as a token value.
+ *
+ * The kit's own state declaration (`--dk-kit-states`, on every component root)
+ * is not a token: it is excluded from `count`, so a page whose token sheet is
+ * absent but whose kit stylesheet loaded counts 0, not 8.
  */
 export const TOKEN_VALUES_EXPRESSION = `(() => {
   const names = new Set();
@@ -112,7 +118,7 @@ export const TOKEN_VALUES_EXPRESSION = `(() => {
     try { rules = sheet.cssRules; } catch (e) { continue; }
     for (const r of rules) {
       if (!r.style) continue;
-      for (const p of r.style) if (p.startsWith('--dk-')) names.add(p);
+      for (const p of r.style) if (p.startsWith('--dk-') && p !== ${JSON.stringify(STATES_PROPERTY)}) names.add(p);
     }
   }
   const host = document.createElement('div');

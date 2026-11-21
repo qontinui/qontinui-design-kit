@@ -14,6 +14,7 @@
  * error, selected) is compared with the same variant's default cell.
  */
 import { evalValue, openPage, runDoor, type DoorLine, type DoorStep } from "../door/inject.js";
+import { STYLESHEET_LOAD_EXPRESSION, stylesheetLoad, stylesheetMissing, type StylesheetLoad } from "../door/stylesheets.js";
 import { FORCEABLE_STATES, type State } from "../kit/define.js";
 import type { Cell } from "./cells.js";
 import { TOKEN_VALUES_EXPRESSION, classifyDelta, visualDiff, type Diff } from "./delta.js";
@@ -48,6 +49,8 @@ export interface StateCoverage {
   /** The published door that measured, e.g. `@qontinui/ui-bridge-wrapper@0.12.0`. */
   instrument: string;
   summary: { cells: number; measured: number; baseline: number; unknown: number; findings: number };
+  /** The page's linked stylesheets; null when the instrument did not answer. A failed sheet makes every cell UNKNOWN. */
+  stylesheets: StylesheetLoad | null;
   findings: { id: string; finding: "no-delta" | "non-token-delta"; detail: string }[];
   cells: CellResult[];
 }
@@ -107,16 +110,27 @@ export async function checkStates(target: string, rootDir: string): Promise<Stat
     }
     const tokenStep = steps.length;
     steps.push({ action: "pageEvaluate", payload: { expression: TOKEN_VALUES_EXPRESSION } });
+    const sheetStep = steps.length;
+    steps.push({ action: "pageEvaluate", payload: { expression: STYLESHEET_LOAD_EXPRESSION } });
 
     const run = await runDoor(rootDir, page.url, steps);
     const instrument = run.instrument;
     if (run.lines.length !== steps.length) {
       const why = `unknown(instrument-cannot-force): ${instrument} answered ${run.lines.length} of ${steps.length} steps (${run.stderr.slice(0, 160).replace(/\s+/g, " ")})`;
-      return finish(target, instrument, cells.map((c) => unknownCell(c, why)));
+      return finish(target, instrument, null, cells.map((c) => unknownCell(c, why)));
     }
     const tokenValue = evalValue(run.lines[tokenStep]) as { count?: number; values?: string[] } | undefined;
     const tokenValues = new Set(tokenValue?.values ?? []);
-    const tokensKnown = (tokenValue?.count ?? 0) > 0;
+    // Known only when every linked sheet loaded AND the page declares a token other than the kit's own state list.
+    const stylesheets = stylesheetLoad(evalValue(run.lines[sheetStep]), page.url, page.missed());
+    const tokensUnknown =
+      stylesheets === null
+        ? `unknown(instrument-cannot-read): ${instrument} did not answer the stylesheet-load check`
+        : stylesheets.failed.length > 0
+          ? stylesheetMissing(stylesheets.failed)
+          : (tokenValue?.count ?? 0) > 0
+            ? null
+            : "unknown(no-token-values): the page declares no --dk-* custom property other than --dk-kit-states";
 
     const defaultStyles = new Map<string, Record<string, unknown>>();
     for (const c of cells) {
@@ -142,8 +156,8 @@ export async function checkStates(target: string, rootDir: string): Promise<Stat
         results.push(unknownCell(c, `unknown(element-not-measured): ${line?.error?.message ?? "no stateStyles"}`.slice(0, 200)));
         continue;
       }
-      if (!tokensKnown) {
-        results.push(unknownCell(c, "unknown(no-token-values): the page declares no --dk-* custom property"));
+      if (tokensUnknown !== null) {
+        results.push(unknownCell(c, tokensUnknown));
         continue;
       }
       let diffs: Diff[];
@@ -180,13 +194,13 @@ export async function checkStates(target: string, rootDir: string): Promise<Stat
         complete: hasDelta && cls.nonToken.length === 0,
       });
     }
-    return finish(target, instrument, results);
+    return finish(target, instrument, stylesheets, results);
   } finally {
     await page.close();
   }
 }
 
-function finish(url: string, instrument: string, cells: CellResult[]): StateCoverage {
+function finish(url: string, instrument: string, stylesheets: StylesheetLoad | null, cells: CellResult[]): StateCoverage {
   const findings: StateCoverage["findings"] = [];
   for (const r of cells) {
     if (r.status !== "measured") continue;
@@ -207,6 +221,7 @@ function finish(url: string, instrument: string, cells: CellResult[]): StateCove
       unknown: cells.filter((c) => c.status === "unknown").length,
       findings: findings.length,
     },
+    stylesheets,
     findings,
     cells,
   };

@@ -10,6 +10,7 @@
  */
 import fs from "node:fs";
 import { evalValue, openPage, runDoor } from "../door/inject.js";
+import { STYLESHEET_LOAD_EXPRESSION, stylesheetLoad, stylesheetMissing, type StylesheetLoad } from "../door/stylesheets.js";
 import type { StyleConstraint, StyleGuideConfig, StyleRule } from "../emit/guide.js";
 
 export interface GuideFailure {
@@ -26,6 +27,8 @@ export interface GuideReport {
   failures: GuideFailure[];
   /** Rules that matched no element on the page: not a failure, but not a pass either. */
   unmatchedRules: string[];
+  /** The page's linked stylesheets; any failed one makes the run UNKNOWN (exit 3), never a verdict. */
+  stylesheets: StylesheetLoad;
   instrument: string;
 }
 
@@ -135,11 +138,18 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
       { action: "discover", payload: {} },
       { action: "getDesignSnapshot", payload: { limit: 1000 } },
       { action: "pageEvaluate", payload: { expression: canonicalizeExpression(pairs) } },
+      { action: "pageEvaluate", payload: { expression: STYLESHEET_LOAD_EXPRESSION } },
     ]);
     const snap = run.lines[1]?.result as { elements?: unknown[]; truncated?: boolean } | undefined;
     const canon = evalValue(run.lines[2]);
     if (!snap?.elements || !Array.isArray(canon)) {
       throw new Error(`unknown(instrument-cannot-read): ${run.instrument} gave no design snapshot (${run.stderr.slice(0, 160).replace(/\s+/g, " ")})`);
+    }
+    // A missing sheet leaves the page on browser defaults: whatever the rules say about it is not about the design.
+    const stylesheets = stylesheetLoad(evalValue(run.lines[3]), page.url, page.missed());
+    if (!stylesheets) throw new Error(`unknown(instrument-cannot-read): ${run.instrument} did not answer the stylesheet-load check`);
+    if (stylesheets.failed.length > 0) {
+      throw new Error(`${stylesheetMissing(stylesheets.failed)}; a guide evaluated without its stylesheets reads browser defaults, not the page`);
     }
     if (snap.elements.length === 0) throw new Error("unknown(no-elements): the page returned no registered elements; a guide that read nothing is not a pass");
     if (snap.truncated) throw new Error("unknown(snapshot-truncated): the page has more elements than one snapshot returns");
@@ -149,7 +159,7 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
     const rules = applyCanonical(guide.rules, map);
     const { failures, matched } = await validateElementsDetailed(guide, rules, snap.elements);
     const unmatchedRules = rules.map((r) => r.id).filter((id) => !matched.has(id));
-    return { guide: guideFile, elements: snap.elements.length, rules: rules.length, failures, unmatchedRules, instrument: run.instrument };
+    return { guide: guideFile, elements: snap.elements.length, rules: rules.length, failures, unmatchedRules, stylesheets, instrument: run.instrument };
   } finally {
     await page.close();
   }

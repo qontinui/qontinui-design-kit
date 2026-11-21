@@ -242,16 +242,14 @@ async function checkStatesCommand(args: Args, out: Out): Promise<number> {
   const s = coverage.summary;
   out(`design-kit check-states: ${s.cells} cells, ${s.measured} measured, ${s.baseline} baseline, ${s.unknown} unknown, ${s.findings} findings (${coverage.instrument})`);
   if (s.findings > 0) return 1;
+  // Name why before the verdict: a missing stylesheet makes every cell unknown, so nothing is measured.
+  const odd = unexpectedUnknowns(coverage);
+  for (const c of odd.slice(0, 5)) out(`${c.unknown} ${c.id}`);
   if (s.measured === 0) {
     out("design-kit: unknown(nothing-measured): no cell was measured");
     return 3;
   }
-  const odd = unexpectedUnknowns(coverage);
-  if (odd.length > 0) {
-    for (const c of odd.slice(0, 5)) out(`${c.unknown} ${c.id}`);
-    return 3;
-  }
-  return 0;
+  return odd.length > 0 ? 3 : 0;
 }
 
 async function validateGuideCommand(args: Args, out: Out): Promise<number> {
