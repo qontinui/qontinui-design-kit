@@ -290,7 +290,7 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
   }
   const jsonFile = args.json !== null ? path.resolve(args.root, args.json) : null;
   const { validateGuide, guideJson, GuideUnknown } = await import("./validate/guide.js");
-  const write = (json: ReturnType<typeof guideJson>): void => {
+  const writeJson = (json: ReturnType<typeof guideJson>): void => {
     if (jsonFile === null) return;
     fs.mkdirSync(path.dirname(jsonFile), { recursive: true });
     fs.writeFileSync(jsonFile, JSON.stringify(json, null, 2) + "\n");
@@ -300,7 +300,7 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
     report = await validateGuide(path.resolve(args.root, guide), target, args.root, storageState ? { storageState } : {});
   } catch (e) {
     // An UNKNOWN still writes its report, with the reason; main() prints it and exits 3.
-    if (e instanceof GuideUnknown) write(guideJson(e.partial, 3, e.message));
+    if (e instanceof GuideUnknown) writeJson(guideJson(e.partial, 3, e.message));
     throw e;
   }
   const errors = report.failures.filter((f) => f.severity === "error");
@@ -309,12 +309,12 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
   out(`design-kit validate-guide: ${report.elements} elements, ${report.rules} rules, ${report.failures.length} failures (${report.instrument})`);
   if (errors.length === 0 && report.rules > 0 && report.unmatchedRules.length === report.rules) {
     const why = "unknown(no-rule-matched): no rule answered to any element; nothing was evaluated";
-    write(guideJson(report, 3, why));
+    writeJson(guideJson(report, 3, why));
     out(`design-kit: ${why}`);
     return 3;
   }
   const code = errors.length > 0 ? 1 : 0;
-  write(guideJson(report, code, null));
+  writeJson(guideJson(report, code, null));
   return code;
 }
 

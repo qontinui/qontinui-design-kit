@@ -43,7 +43,7 @@ export function stylesheetLoad(pageValue: unknown, pageUrl: string, missed: read
   } catch {
     origin = null;
   }
-  const name = (href: string): string => {
+  const sheetPath = (href: string): string => {
     try {
       const u = new URL(href);
       return u.origin === origin ? u.pathname : href;
@@ -51,7 +51,7 @@ export function stylesheetLoad(pageValue: unknown, pageUrl: string, missed: read
       return href;
     }
   };
-  const failed = [...new Set([...missed, ...v.failed.map((f) => name(String(f)))])].sort();
+  const failed = [...new Set([...missed, ...v.failed.map((f) => sheetPath(String(f)))])].sort();
   return { requested: v.requested, failed };
 }
 

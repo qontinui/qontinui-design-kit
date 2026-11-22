@@ -199,7 +199,7 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
   const pairs = pairsOf(guide.rules);
   const page = await openPage(target);
   const known: GuidePartial = { guide: guideFile, target, rules: guide.rules.length, elements: null, stylesheets: null, instrument: null };
-  const unknown = (message: string): GuideUnknown => new GuideUnknown(message, { ...known });
+  const unknownVerdict = (message: string): GuideUnknown => new GuideUnknown(message, { ...known });
   try {
     const run = await runDoor(
       rootDir,
@@ -216,19 +216,19 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
     const snap = run.lines[1]?.result as { elements?: unknown[]; truncated?: boolean } | undefined;
     const canon = evalValue(run.lines[2]);
     if (!snap?.elements || !Array.isArray(canon)) {
-      throw unknown(`unknown(instrument-cannot-read): ${run.instrument} gave no design snapshot (${run.stderr.slice(0, 160).replace(/\s+/g, " ")})`);
+      throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} gave no design snapshot (${run.stderr.slice(0, 160).replace(/\s+/g, " ")})`);
     }
     known.elements = snap.elements.length;
     // A missing sheet leaves the page on browser defaults: whatever the rules say about it is not about the design.
     const stylesheets = stylesheetLoad(evalValue(run.lines[3]), page.url, page.missed());
-    if (!stylesheets) throw unknown(`unknown(instrument-cannot-read): ${run.instrument} did not answer the stylesheet-load check`);
+    if (!stylesheets) throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} did not answer the stylesheet-load check`);
     known.stylesheets = stylesheets;
     if (stylesheets.failed.length > 0) {
-      throw unknown(`${stylesheetMissing(stylesheets.failed)}; a guide evaluated without its stylesheets reads browser defaults, not the page`);
+      throw unknownVerdict(`${stylesheetMissing(stylesheets.failed)}; a guide evaluated without its stylesheets reads browser defaults, not the page`);
     }
-    if (snap.elements.length === 0) throw unknown("unknown(no-elements): the page returned no registered elements; a guide that read nothing is not a pass");
-    if (snap.truncated) throw unknown("unknown(snapshot-truncated): the page has more elements than one snapshot returns");
-    if (canon.length !== pairs.length) throw unknown("unknown(instrument-cannot-read): the canonicalisation answered a different number of values than asked");
+    if (snap.elements.length === 0) throw unknownVerdict("unknown(no-elements): the page returned no registered elements; a guide that read nothing is not a pass");
+    if (snap.truncated) throw unknownVerdict("unknown(snapshot-truncated): the page has more elements than one snapshot returns");
+    if (canon.length !== pairs.length) throw unknownVerdict("unknown(instrument-cannot-read): the canonicalisation answered a different number of values than asked");
     const map = new Map<string, string>();
     pairs.forEach(([p, v], i) => map.set(`${p}\0${v}`, String(canon[i])));
     const rules = applyCanonical(guide.rules, map);
