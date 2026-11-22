@@ -169,6 +169,28 @@ function entriesFor(leaves: Leaf[]): Entry[] {
     if (whole !== null) return resolveLeaf(targetOf(l.path, whole), next);
     return resolveParts(l.value, l, next, true, null);
   };
+  // A field of a composite value that is a whole alias: only a shadow's fields and layers may be, each naming a leaf of its type.
+  const fieldAlias = (owner: Leaf, field: string, slot: string | typeof LAYER | null, trail: string[]): Resolved => {
+    if (owner.type !== "shadow") {
+      throw new SourceError([`leaf ${owner.path}: alias {${field}} inside a ${owner.type ?? "untyped"} value; only a shadow's fields and layers may be aliases`]);
+    }
+    if (slot === "inset") throw new SourceError([`leaf ${owner.path}: inset is true or false, never an alias`]);
+    const t = targetOf(owner.path, field);
+    if (!EMITTED_GROUPS.includes(t.group)) {
+      throw new SourceError([`leaf ${owner.path}: alias {${field}} names a leaf in ${t.group}, which emits no CSS variable to read`]);
+    }
+    const need = slot === LAYER ? "shadow" : typeof slot === "string" && Object.hasOwn(SHADOW_SLOT_TYPES, slot) ? SHADOW_SLOT_TYPES[slot] : undefined;
+    const where = slot === LAYER ? "a shadow-array element" : (slot ?? "no field");
+    if (need === undefined) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${where}, which is not a shadow field`]);
+    // Resolve first, so a broken or cyclic chain behind the target is named as such, not as a type mismatch.
+    const value = resolveLeaf(t, trail).value;
+    const got = typeOf(t);
+    if (got !== need) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${where}, which needs a ${need} leaf; ${t.path} is ${got ?? "untyped"}`]);
+    if (slot === LAYER && Array.isArray(value)) {
+      throw new SourceError([`leaf ${owner.path}: alias {${field}} names a multi-layer shadow; a shadow-array element is one layer`]);
+    }
+    return { value, css: `var(${varName(t.path)})` };
+  };
   // `slot` is the shadow field a value fills (LAYER for an array element), or null.
   const resolveParts = (v: unknown, owner: Leaf, trail: string[], top: boolean, slot: string | typeof LAYER | null): Resolved => {
     if (Array.isArray(v)) {
@@ -187,27 +209,7 @@ function entriesFor(leaves: Leaf[]): Entry[] {
     }
     if (typeof v !== "string") return { value: v, css: v };
     const field = top ? null : aliasTarget(v);
-    if (field !== null) {
-      if (owner.type !== "shadow") {
-        throw new SourceError([`leaf ${owner.path}: alias {${field}} inside a ${owner.type ?? "untyped"} value; only a shadow's fields and layers may be aliases`]);
-      }
-      if (slot === "inset") throw new SourceError([`leaf ${owner.path}: inset is true or false, never an alias`]);
-      const t = targetOf(owner.path, field);
-      if (!EMITTED_GROUPS.includes(t.group)) {
-        throw new SourceError([`leaf ${owner.path}: alias {${field}} names a leaf in ${t.group}, which emits no CSS variable to read`]);
-      }
-      const need = slot === LAYER ? "shadow" : typeof slot === "string" && Object.hasOwn(SHADOW_SLOT_TYPES, slot) ? SHADOW_SLOT_TYPES[slot] : undefined;
-      const where = slot === LAYER ? "a shadow-array element" : (slot ?? "no field");
-      if (need === undefined) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${where}, which is not a shadow field`]);
-      // Resolve first, so a broken or cyclic chain behind the target is named as such, not as a type mismatch.
-      const value = resolveLeaf(t, trail).value;
-      const got = typeOf(t);
-      if (got !== need) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${where}, which needs a ${need} leaf; ${t.path} is ${got ?? "untyped"}`]);
-      if (slot === LAYER && Array.isArray(value)) {
-        throw new SourceError([`leaf ${owner.path}: alias {${field}} names a multi-layer shadow; a shadow-array element is one layer`]);
-      }
-      return { value, css: `var(${varName(t.path)})` };
-    }
+    if (field !== null) return fieldAlias(owner, field, slot, trail);
     // A `string` leaf is free text; any other value cannot carry an alias inside a longer string.
     if ((owner.type !== "string" || !top) && EMBEDDED_ALIAS.test(v)) {
       throw new SourceError([`leaf ${owner.path}: an alias may be a whole value or a whole field of a composite value, not embedded in a string: ${JSON.stringify(v)}`]);

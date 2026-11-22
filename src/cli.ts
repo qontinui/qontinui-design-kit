@@ -67,15 +67,12 @@ export function parseArgs(argv: string[]): Args {
   for (i = 0; i < argv.length; i++) {
     const v = argv[i] as string;
     if (v === "--check") a.check = true;
-    else if (v === "--root") a.root = path.resolve(value(v));
-    else if (v === "--source") a.source = value(v);
-    else if (v === "--out") a.out = value(v);
-    else if (v === "--base") a.base = value(v);
-    else if (v === "--file") a.file = value(v);
-    else if (v === "--kit-dir") a.kitDir = value(v);
-    else if (v === "--storage-state") a.storageState = value(v);
-    else if (v === "--json") a.json = value(v);
-    else if (v.startsWith("-")) throw new Error(`unknown option ${v}`);
+    else if (Object.hasOwn(VALUE_OPTIONS, v)) {
+      const key = VALUE_OPTIONS[v as keyof typeof VALUE_OPTIONS];
+      const given = value(v);
+      if (key === "root") a.root = path.resolve(given);
+      else a[key] = given;
+    } else if (v.startsWith("-")) throw new Error(`unknown option ${v}`);
     else if (a.command === null) a.command = v;
     else a.positional.push(v);
   }
@@ -99,8 +96,18 @@ function samePath(a: string, b: string): boolean {
   }
 }
 
-/** The options that take a value, so a scan of the raw argv can tell a value from a positional argument. */
-const VALUE_FLAGS = new Set(["--root", "--source", "--out", "--base", "--file", "--kit-dir", "--storage-state", "--json"]);
+/** The options that take a value, and the field each sets: one table for parseArgs and for the raw-argv scan in clearJsonReport. */
+const VALUE_OPTIONS = {
+  "--root": "root",
+  "--source": "source",
+  "--out": "out",
+  "--base": "base",
+  "--file": "file",
+  "--kit-dir": "kitDir",
+  "--storage-state": "storageState",
+  "--json": "json",
+} as const satisfies Record<string, keyof Args>;
+const VALUE_FLAGS: ReadonlySet<string> = new Set(Object.keys(VALUE_OPTIONS));
 
 /**
  * `validate-guide --json <file>`: remove an earlier report before anything can

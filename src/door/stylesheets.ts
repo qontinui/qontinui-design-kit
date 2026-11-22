@@ -9,8 +9,10 @@
  *   never has a sheet, by design, and is not counted) and every `@import` in a
  *   readable sheet: the page's resource timing entry. A `responseStatus` of 400
  *   or more, or a `contentType` that is not `text/css` (a dev server answering
- *   a missing `.css` path with its HTML shell, which Chromium refuses to apply),
- *   is a sheet that did not load. Chromium gives both a non-null, empty `sheet`,
+ *   a missing `.css` path with its HTML shell, which Chromium refuses to apply
+ *   in a standards-mode page), is a sheet that did not load. A quirks-mode page
+ *   (no doctype) applies a same-origin sheet served as `text/plain`, which this
+ *   rule still counts as not loaded: the error is toward UNKNOWN, never a pass. Chromium gives both a non-null, empty `sheet`,
  *   so the timing entry is what catches them on a URL target. A link with no
  *   sheet despite a response is counted as not loaded too;
  * - a link or an `@import` with no sheet and no recorded response is `pending`:

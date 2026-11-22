@@ -62,7 +62,13 @@ function stubDoorProject() {
     path.join(pkg, "dist", "inject-cli.cjs"),
     "const fs = require('fs'); const path = require('path');\n" +
       "let input = ''; process.stdin.on('data', (d) => (input += d));\n" +
-      "process.stdin.on('end', () => { fs.writeFileSync(path.join(__dirname, 'argv.json'), JSON.stringify(process.argv.slice(2))); fs.writeFileSync(path.join(__dirname, 'steps.ndjson'), input); process.exit(1); });\n",
+      "process.stdin.on('end', () => {\n" +
+      "  fs.writeFileSync(path.join(__dirname, 'argv.json'), JSON.stringify(process.argv.slice(2)));\n" +
+      "  fs.writeFileSync(path.join(__dirname, 'steps.ndjson'), input);\n" +
+      "  const canned = path.join(__dirname, 'answers.ndjson');\n" +
+      "  if (!fs.existsSync(canned)) process.exit(1);\n" +
+      "  process.stdout.write(fs.readFileSync(canned, 'utf8'), () => process.exit(0));\n" +
+      "});\n",
   );
   fs.writeFileSync(path.join(dir, "guide.json"), JSON.stringify(GUIDE));
   fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify({ cookies: [], origins: [] }));
@@ -70,6 +76,8 @@ function stubDoorProject() {
     dir,
     argv: () => JSON.parse(fs.readFileSync(path.join(pkg, "dist", "argv.json"), "utf8")),
     steps: () => fs.readFileSync(path.join(pkg, "dist", "steps.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l)),
+    /** Make the stub door answer these lines, one per step, instead of nothing. */
+    answer: (lines) => fs.writeFileSync(path.join(pkg, "dist", "answers.ndjson"), lines.map((l) => JSON.stringify(l)).join("\n") + "\n"),
     cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
   };
 }
@@ -278,6 +286,53 @@ test("validate-guide --json naming a hard link to the guide is refused as an inp
     assert.deepEqual(lines, [`design-kit: --json ${link} is one of validate-guide's inputs; refusing to overwrite it`]);
     assert.equal(fs.existsSync(link), true);
     assert.equal(fs.existsSync(path.join(p.dir, "guide.json")), true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- review round 7
+
+const evaluated = (value) => ({ action: "pageEvaluate", result: { result: { value } } });
+const sheets = (pending) => evaluated({ requested: 1, failed: [], unreadable: [], pending });
+const LATE = "http://127.0.0.1:9/late.css";
+const PENDING_LATE = `unknown(stylesheet-pending): ${LATE} had no stylesheet when the page was read (still loading, or blocked before any response)`;
+
+test("validate-guide: a sheet pending at the first stylesheet read is UNKNOWN even when the last read finds it loaded", async () => {
+  const p = stubDoorProject();
+  try {
+    p.answer([
+      sheets([LATE]),
+      { action: "discover", result: {} },
+      { action: "getDesignSnapshot", result: { elements: [{ elementId: "dom-go", type: "button", styles: { color: "rgb(17, 17, 17)" } }] } },
+      evaluated(["rgb(17, 17, 17)"]),
+      sheets([]),
+    ]);
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:8/page", "--root", p.dir, "--json", "r.json"], (s) => lines.push(s)), 3);
+    assert.deepEqual(lines, [`design-kit: ${PENDING_LATE}`]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(p.dir, "r.json"), "utf8")).stylesheets, { requested: 1, failed: [], unreadable: [], pending: [LATE] });
+  } finally {
+    p.cleanup();
+  }
+});
+
+test("check-states: a sheet pending at the first stylesheet read makes every measured cell UNKNOWN even when the last read finds it loaded", async () => {
+  const p = stubDoorProject();
+  try {
+    const page = path.join(p.dir, "specimen.html");
+    fs.writeFileSync(page, '<!doctype html><script type="application/json" id="dk-specimen-cells">[{"component":"Button","variant":"primary","state":"hover","id":"c1","target":"b1"}]</script>');
+    p.answer([
+      sheets([LATE]),
+      { action: "discover", result: {} },
+      { action: "getElementStateStyles", result: { stateStyles: [{ state: "hover", styles: {}, diffFromDefault: [{ property: "color", defaultValue: "rgb(0, 0, 0)", stateValue: "rgb(1, 2, 3)" }] }] } },
+      evaluated({ count: 1, values: ["rgb(1, 2, 3)"] }),
+      sheets([]),
+    ]);
+    assert.equal(await main(["check-states", page, "--root", p.dir, "--file", "coverage.json"], () => undefined), 3);
+    const cov = JSON.parse(fs.readFileSync(path.join(p.dir, "coverage.json"), "utf8"));
+    assert.deepEqual(cov.cells.map((c) => [c.id, c.status, c.unknown]), [["c1", "unknown", PENDING_LATE]]);
+    assert.deepEqual(cov.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [LATE] });
   } finally {
     p.cleanup();
   }
