@@ -20,7 +20,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ImportGroup, ImportSpec, Leaf, ValueType } from "../source/schema.js";
-import { IMPORT_GROUPS } from "../source/schema.js";
+import { IMPORT_GROUPS, SourceError } from "../source/schema.js";
 
 export const TOKEN_PACKAGE = "@qontinui/design-tokens";
 const DEFAULT_REPO = "https://github.com/qontinui/qontinui-design-tokens.git";
@@ -145,14 +145,14 @@ function flatten(prefix: string, obj: Record<string, unknown>, out: [string, str
 
 /** A typography number; anything else is refused with the key named, never skipped into a silently smaller group. */
 function numberOf(pkg: TokenPackage, group: string, key: string, v: unknown): number {
-  if (typeof v !== "number" || !Number.isFinite(v)) throw new Error(`${pkg.label} ${group}.${key} is ${JSON.stringify(v)}; the adapter reads only a number`);
+  if (typeof v !== "number" || !Number.isFinite(v)) throw new SourceError([`${pkg.label} ${group}.${key} is ${JSON.stringify(v)}; the adapter reads only a number`]);
   return v;
 }
 
 /** `"0.04em"` -> `{ value: 0.04, unit: "em" }`; any other spelling is refused with the key named. */
 function emLength(pkg: TokenPackage, key: string, v: unknown): { value: number; unit: "em" } {
   const m = typeof v === "string" ? /^(-?\d*\.?\d+)em$/.exec(v) : null;
-  if (!m) throw new Error(`${pkg.label} letterSpacings.${key} is ${JSON.stringify(v)}; the adapter reads only <number>em`);
+  if (!m) throw new SourceError([`${pkg.label} letterSpacings.${key} is ${JSON.stringify(v)}; the adapter reads only <number>em`]);
   return { value: parseFloat(m[1] as string), unit: "em" };
 }
 

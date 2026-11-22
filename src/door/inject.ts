@@ -140,8 +140,11 @@ export function serveDir(dir: string): Promise<ServedPage> {
  * A page argument is a URL or a local file. A file is served from its own
  * directory so the check never needs a dev server.
  */
+/** A page target that is a URL (served by someone else), not a local file the kit serves. */
+export const isUrlTarget = (target: string): boolean => /^https?:\/\//.test(target);
+
 export async function openPage(target: string): Promise<ServedPage> {
-  if (/^https?:\/\//.test(target)) return { url: target, close: async () => undefined, missed: () => [] };
+  if (isUrlTarget(target)) return { url: target, close: async () => undefined, missed: () => [] };
   const file = path.resolve(target);
   if (!fs.existsSync(file)) throw new Error(`not a URL and not a file: ${target}`);
   const server = await serveDir(path.dirname(file));

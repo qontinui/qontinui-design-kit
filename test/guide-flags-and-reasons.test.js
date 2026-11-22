@@ -362,3 +362,22 @@ test("validate-guide --json is not cleared when a value flag before it has no va
     p.cleanup();
   }
 });
+
+// ---------------------------------------------------------------- review round 10
+
+test("validate-guide: a --json report that cannot be written still prints the verdict first, then the write failure (exit 2)", async () => {
+  const p = stubDoorProject();
+  const ro = path.join(p.dir, "ro");
+  try {
+    fs.mkdirSync(ro);
+    fs.chmodSync(ro, 0o555);
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "ro/r.json"], (s) => lines.push(s)), 2);
+    assert.deepEqual(lines[0], "design-kit: unknown(instrument-cannot-read): @qontinui/ui-bridge-wrapper@9.9.9 gave no design snapshot ()");
+    assert.match(lines[1], /^design-kit: --json .*\/ro\/r\.json could not be written: EACCES/);
+    assert.equal(lines.length, 2);
+  } finally {
+    fs.chmodSync(ro, 0o755);
+    p.cleanup();
+  }
+});

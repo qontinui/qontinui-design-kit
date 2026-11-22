@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { compileSource, driftedOutputs, writeOutputs } from "./compile/compile.js";
 import { compareBounds, formatMove, stepSummary } from "./diff/diff.js";
 import type { ThresholdEntry } from "./emit/budgets.js";
+import { isUrlTarget } from "./door/inject.js";
 import { lintDir } from "./lint/classes.js";
 import { parseSource } from "./source/parse.js";
 import { SourceError, GROUPS } from "./source/schema.js";
@@ -56,12 +57,17 @@ interface Args {
   json: string | null;
 }
 
+/** A value flag's value is present: not missing, not empty, not the next option. One predicate for parseArgs and the raw-argv scan. */
+function hasValue(next: string | undefined): next is string {
+  return next !== undefined && next !== "" && !next.startsWith("--");
+}
+
 export function parseArgs(argv: string[]): Args {
   const a: Args = { command: null, positional: [], check: false, root: process.cwd(), source: "design/language.dtcg.json", out: "src/design", base: null, file: null, kitDir: null, storageState: null, json: null };
   let i = 0;
   const value = (flag: string): string => {
     const next = argv[++i];
-    if (next === undefined || next === "" || next.startsWith("--")) throw new Error(`${flag} needs a value`);
+    if (!hasValue(next)) throw new Error(`${flag} needs a value`);
     return next;
   };
   for (i = 0; i < argv.length; i++) {
@@ -128,7 +134,7 @@ function clearJsonReport(argv: string[], out: Out): number | null {
       const next = argv[i + 1];
       // A value flag with no value, or an empty one (an unset "$ROOT"): parseArgs refuses the run, and the
       // paths it would name are unknown, so clear nothing.
-      if (next === undefined || next === "" || next.startsWith("--")) return null;
+      if (!hasValue(next)) return null;
       if (v === "--root") root = path.resolve(next);
       if (v === "--json") json = next;
       if (v === "--storage-state") storageState = next;
@@ -140,7 +146,7 @@ function clearJsonReport(argv: string[], out: Out): number | null {
   const [, guide, target] = positional;
   const inputs = [
     guide ? path.resolve(root, guide) : null,
-    target && !/^https?:\/\//.test(target) ? path.resolve(target) : null,
+    target && !isUrlTarget(target) ? path.resolve(target) : null,
     storageState ? path.resolve(root, storageState) : null,
   ].filter((f): f is string => f !== null);
   if (inputs.some((f) => samePath(f, file))) {
@@ -363,18 +369,27 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
     }
   }
   const { validateGuide, guideJson, GuideUnknown } = await import("./validate/guide.js");
-  const writeJson = (json: ReturnType<typeof guideJson>): void => {
-    if (jsonFile === null) return;
-    fs.mkdirSync(path.dirname(jsonFile), { recursive: true });
-    fs.writeFileSync(jsonFile, JSON.stringify(json, null, 2) + "\n");
+  // The verdict is printed before the report is written, so a report that cannot be written
+  // (a read-only directory) is a second line and exit 2, never a replacement for the verdict.
+  const writeJson = (json: ReturnType<typeof guideJson>): boolean => {
+    if (jsonFile === null) return true;
+    try {
+      fs.mkdirSync(path.dirname(jsonFile), { recursive: true });
+      fs.writeFileSync(jsonFile, JSON.stringify(json, null, 2) + "\n");
+      return true;
+    } catch (e) {
+      out(`design-kit: --json ${jsonFile} could not be written: ${(e as Error).message}`);
+      return false;
+    }
   };
   let report;
   try {
     report = await validateGuide(path.resolve(args.root, guide), target, args.root, storageState ? { storageState } : {});
   } catch (e) {
-    // An UNKNOWN still writes its report, with the reason; main() prints it and exits 3.
-    if (e instanceof GuideUnknown) writeJson(guideJson(e.partial, 3, e.message));
-    throw e;
+    if (!(e instanceof GuideUnknown)) throw e;
+    // An UNKNOWN still writes its report, with the reason (exit 3).
+    out(`design-kit: ${e.message}`);
+    return writeJson(guideJson(e.partial, 3, e.message)) ? 3 : 2;
   }
   const errors = report.failures.filter((f) => f.severity === "error");
   for (const id of report.unmatchedRules) out(`UNMATCHED ${id}: no element on the page answers to this rule`);
@@ -382,13 +397,11 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
   out(`design-kit validate-guide: ${report.elements} elements, ${report.rules} rules, ${report.failures.length} failures (${report.instrument})`);
   if (errors.length === 0 && report.rules > 0 && report.unmatchedRules.length === report.rules) {
     const why = "unknown(no-rule-matched): no rule answered to any element; nothing was evaluated";
-    writeJson(guideJson(report, 3, why));
     out(`design-kit: ${why}`);
-    return 3;
+    return writeJson(guideJson(report, 3, why)) ? 3 : 2;
   }
   const code = errors.length > 0 ? 1 : 0;
-  writeJson(guideJson(report, code, null));
-  return code;
+  return writeJson(guideJson(report, code, null)) ? code : 2;
 }
 
 async function indexCommand(args: Args, out: Out): Promise<number> {

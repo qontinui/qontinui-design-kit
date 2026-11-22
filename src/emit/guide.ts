@@ -6,6 +6,7 @@
  * and one rule per component that its state matrix is declared.
  */
 import type { Entry } from "../compile/model.js";
+import { SourceError } from "../source/schema.js";
 import { COMPONENTS, type KitEntry } from "../kit/registry.js";
 import { STATES_PROPERTY } from "../kit/style.js";
 import { GENERATED_HEADER, kebab } from "./names.js";
@@ -134,7 +135,8 @@ function tokensOf(entries: Entry[]): DesignTokens {
   for (const e of under(entries, "layout.breakpoint.")) {
     const v = canonical(e.resolvedCss);
     const n = lengthPx(v);
-    if (n === null) throw new Error(`${e.path} is ${v}; a guide breakpoint is a px, rem or em length`);
+    // A source the guide cannot state is refused for every compile-based verb (compile, status, specimen, diff).
+    if (n === null) throw new SourceError([`${e.path} is ${v}; a guide breakpoint is a px, rem or em length`]);
     breakpoints[nameAfter(e, "layout.breakpoint.")] = n;
   }
   return {

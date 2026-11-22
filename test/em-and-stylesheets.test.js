@@ -460,3 +460,16 @@ test("check-states: tokens declared behind an @import, or inside an @layer block
     layered.cleanup();
   }
 });
+
+// ---------------------------------------------------------------- review round 10
+
+test("a breakpoint the guide cannot state is a refused source for every compile-based verb (status included)", async () => {
+  const p = mkProject({ $extensions: { qontinui: { name: "fixture" } }, layout: { breakpoint: { wide: leaf("dimension", "50vw", "authored(f-bp)") } } });
+  try {
+    const lines = [];
+    assert.equal(await main(["status", "--root", p.dir], (s) => lines.push(s)), 2);
+    assert.deepEqual(lines, ["design-kit: the source was refused:\n  layout.breakpoint.wide is 50vw; a guide breakpoint is a px, rem or em length"]);
+  } finally {
+    p.cleanup();
+  }
+});

@@ -27,7 +27,9 @@
  * content type, which say nothing; the resource timing buffer (250 entries by
  * default) can drop entries on a page that loads more resources than that,
  * leaving the kit server's own record as the only signal for a file target;
- * the `@import`s of an unreadable sheet cannot be walked; sheets inside a shadow
+ * the `@import`s of an unreadable sheet cannot be walked; a browser whose
+ * resource timing has no `responseStatus` or `contentType` (the pinned Chromium
+ * has both) would read a 404'd sheet on a URL target as loaded; sheets inside a shadow
  * root are not read; and a sheet for another medium (`media="print"`) is read
  * like any other, so its 404 makes the page UNKNOWN too.
  *
@@ -70,7 +72,7 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
     if (badResponse(i)) failed.push(href);
     else if (!l.sheet) (i === undefined || i.code === 0 ? pending : failed).push(href);
   }
-  const walk = (sheet, depth) => {
+  const walkSheet = (sheet, depth) => {
     let rules;
     try { rules = sheet.cssRules; } catch (e) { unreadable.push(sheet.href || '<inline style>'); return; }
     if (depth > 8) return;
@@ -84,11 +86,11 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
       }
       const i = seen.get(href);
       if (badResponse(i)) failed.push(href);
-      else if (r.styleSheet) walk(r.styleSheet, depth + 1);
+      else if (r.styleSheet) walkSheet(r.styleSheet, depth + 1);
       else (i === undefined || i.code === 0 ? pending : failed).push(href);
     }
   };
-  for (const s of Array.from(document.styleSheets)) walk(s, 0);
+  for (const s of Array.from(document.styleSheets)) walkSheet(s, 0);
   return { requested: links.length, failed, unreadable, pending };
 })()`;
 
