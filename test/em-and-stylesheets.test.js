@@ -435,3 +435,28 @@ test("validate-guide: a 404 @import inside a sheet reached through a redirect is
   assert.equal(r.code, 3);
   assert.deepEqual(r.report.stylesheets, { requested: 1, failed: ["/sub/c.css"], unreadable: [], pending: [] });
 });
+
+// ---------------------------------------------------------------- review round 9
+
+test("check-states: tokens declared behind an @import, or inside an @layer block, are read as tokens and the specimen is measured", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const imported = await specimenWithoutInlineTokens("tokens-import", { link: false });
+  try {
+    fs.writeFileSync(path.join(imported.dir, "tokens.css"), imported.outputs["tokens.css"]);
+    fs.writeFileSync(imported.file, fs.readFileSync(imported.file, "utf8").replace("<style>", '<style>@import url("tokens.css");\n'));
+    const { code, cov } = await runCheckStates(imported);
+    assert.equal(code, 0);
+    assert.deepEqual(cov.summary, { cells: 56, measured: 36, baseline: 10, unknown: 10, findings: 0 });
+  } finally {
+    imported.cleanup();
+  }
+  const layered = await writeSpecimen({ name: "tokens-layer" });
+  try {
+    fs.writeFileSync(layered.file, layered.html.replace(layered.outputs["tokens.css"], `@layer tokens {\n${layered.outputs["tokens.css"]}\n}`));
+    const { code, cov } = await runCheckStates(layered);
+    assert.equal(code, 0);
+    assert.deepEqual(cov.summary, { cells: 56, measured: 36, baseline: 10, unknown: 10, findings: 0 });
+  } finally {
+    layered.cleanup();
+  }
+});

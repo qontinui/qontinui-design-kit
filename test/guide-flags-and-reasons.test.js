@@ -247,8 +247,8 @@ test("validate-guide --json naming the --storage-state file, or found behind an 
     fs.writeFileSync(page, "<!doctype html><p>x</p>");
     const shifted = [];
     assert.equal(await main(["validate-guide", "--file", "", "guide.json", page, "--root", p.dir, "--json", page], (s) => shifted.push(s)), 2);
-    assert.deepEqual(shifted, [`design-kit: --json ${page} is one of validate-guide's inputs; refusing to overwrite it`]);
-    assert.equal(fs.existsSync(page), true);
+    assert.equal(shifted[0].split("\n")[0], "--file needs a value");
+    assert.equal(fs.existsSync(page), true, "an empty flag value clears nothing, so the page named by --json is kept");
   } finally {
     p.cleanup();
   }
@@ -350,6 +350,10 @@ test("validate-guide --json is not cleared when a value flag before it has no va
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", "--json", "r.json"], (s) => noRoot.push(s)), 2);
     assert.equal(noRoot[0].split("\n")[0], "--root needs a value");
     assert.equal(fs.existsSync(path.join(p.dir, "r.json")), true, "a run that never resolves its report removes nothing");
+    const emptyRoot = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", "", "--json", "r.json"], (s) => emptyRoot.push(s)), 2);
+    assert.equal(emptyRoot[0].split("\n")[0], "--root needs a value");
+    assert.equal(fs.existsSync(path.join(p.dir, "r.json")), true, "an empty --root (an unset \"$ROOT\") removes nothing either");
     const empty = [];
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", ""], (s) => empty.push(s)), 2);
     assert.equal(empty[0].split("\n")[0], "--json needs a value");

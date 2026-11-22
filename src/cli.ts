@@ -126,16 +126,13 @@ function clearJsonReport(argv: string[], out: Out): number | null {
     const v = argv[i] as string;
     if (VALUE_FLAGS.has(v)) {
       const next = argv[i + 1];
-      // A value flag with no value: parseArgs refuses the run, and the paths it would name are unknown, so clear nothing.
-      if (next === undefined || next.startsWith("--")) return null;
-      // An empty value is never assigned (parseArgs refuses it too); skip it so it is not read as a positional.
-      if (next === "") i++;
-      else {
-        if (v === "--root") root = path.resolve(next);
-        if (v === "--json") json = next;
-        if (v === "--storage-state") storageState = next;
-        i++;
-      }
+      // A value flag with no value, or an empty one (an unset "$ROOT"): parseArgs refuses the run, and the
+      // paths it would name are unknown, so clear nothing.
+      if (next === undefined || next === "" || next.startsWith("--")) return null;
+      if (v === "--root") root = path.resolve(next);
+      if (v === "--json") json = next;
+      if (v === "--storage-state") storageState = next;
+      i++;
     } else if (!v.startsWith("-")) positional.push(v);
   }
   if (positional[0] !== "validate-guide" || json === null) return null;

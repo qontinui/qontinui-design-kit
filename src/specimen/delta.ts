@@ -107,6 +107,9 @@ export function visualDiff(base: Record<string, unknown>, other: Record<string, 
  * declaration that is invalid for the property computes to its fallback, so a
  * value equal to that baseline is not taken as a token value.
  *
+ * Names are read from every rule of every readable sheet, through `@import`s
+ * and grouping rules (`@layer`, `@media`, `@supports`) too.
+ *
  * The kit's own state declaration (`--dk-kit-states`, on every component root)
  * is not a token: it is excluded from `count`, so a page whose token sheet is
  * absent but whose kit stylesheet loaded counts 0, not 1 (`count` is the
@@ -114,13 +117,19 @@ export function visualDiff(base: Record<string, unknown>, other: Record<string, 
  */
 export const TOKEN_VALUES_EXPRESSION = `(() => {
   const names = new Set();
+  // Every rule of every readable sheet: imported sheets and grouping rules (@layer, @media, @supports) included.
+  const collect = (rules, depth) => {
+    for (const r of rules) {
+      if (r.style) for (const p of r.style) if (p.startsWith('--dk-') && p !== ${JSON.stringify(STATES_PROPERTY)}) names.add(p);
+      if (depth > 16) continue;
+      if (r.styleSheet) { try { collect(r.styleSheet.cssRules, depth + 1); } catch (e) { /* an unreadable import */ } }
+      if (r.cssRules) collect(r.cssRules, depth + 1);
+    }
+  };
   for (const sheet of document.styleSheets) {
     let rules;
     try { rules = sheet.cssRules; } catch (e) { continue; }
-    for (const r of rules) {
-      if (!r.style) continue;
-      for (const p of r.style) if (p.startsWith('--dk-') && p !== ${JSON.stringify(STATES_PROPERTY)}) names.add(p);
-    }
+    collect(rules, 0);
   }
   const host = document.createElement('div');
   host.style.cssText = 'position:absolute;left:-9999px;top:0;color:rgb(1, 2, 3)';
