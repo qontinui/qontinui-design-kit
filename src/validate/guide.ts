@@ -10,7 +10,7 @@
  */
 import fs from "node:fs";
 import { evalValue, openPage, runDoor } from "../door/inject.js";
-import { STYLESHEET_LOAD_EXPRESSION, stylesheetLoad, stylesheetUnknown, type StylesheetLoad } from "../door/stylesheets.js";
+import { STYLESHEET_LOAD_EXPRESSION, mergeStylesheetLoads, stylesheetLoad, stylesheetUnknown, type StylesheetLoad } from "../door/stylesheets.js";
 import type { StyleConstraint, StyleGuideConfig, StyleRule } from "../emit/guide.js";
 
 export interface GuideFailure {
@@ -211,7 +211,9 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
     const run = await runDoor(
       rootDir,
       page.url,
+      // The stylesheet check brackets the read of the page: a sheet still loading before it is UNKNOWN even if it loaded after.
       [
+        { action: "pageEvaluate", payload: { expression: STYLESHEET_LOAD_EXPRESSION } },
         { action: "discover", payload: {} },
         { action: "getDesignSnapshot", payload: { limit: 1000 } },
         { action: "pageEvaluate", payload: { expression: canonicalizeExpression(pairs) } },
@@ -220,14 +222,17 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
       opts.storageState ? { storageState: opts.storageState } : {},
     );
     known.instrument = run.instrument;
-    const snap = run.lines[1]?.result as { elements?: unknown[]; truncated?: boolean } | undefined;
-    const canon = evalValue(run.lines[2]);
+    const snap = run.lines[2]?.result as { elements?: unknown[]; truncated?: boolean } | undefined;
+    const canon = evalValue(run.lines[3]);
     if (!snap?.elements || !Array.isArray(canon)) {
       throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} gave no design snapshot (${run.stderr.slice(0, 160).replace(/\s+/g, " ")})`);
     }
     known.elements = snap.elements.length;
     // A missing sheet leaves the page on browser defaults: whatever the rules say about it is not about the design.
-    const stylesheets = stylesheetLoad(evalValue(run.lines[3]), page.url, page.missed());
+    const stylesheets = mergeStylesheetLoads(
+      stylesheetLoad(evalValue(run.lines[0]), page.url, []),
+      stylesheetLoad(evalValue(run.lines[4]), page.url, page.missed()),
+    );
     if (!stylesheets) throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} did not answer the stylesheet-load check`);
     known.stylesheets = stylesheets;
     const sheetUnknown = stylesheetUnknown(stylesheets);

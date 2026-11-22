@@ -61,11 +61,17 @@ function stubDoorProject() {
   fs.writeFileSync(
     path.join(pkg, "dist", "inject-cli.cjs"),
     "const fs = require('fs'); const path = require('path');\n" +
-      "process.stdin.resume(); process.stdin.on('end', () => { fs.writeFileSync(path.join(__dirname, 'argv.json'), JSON.stringify(process.argv.slice(2))); process.exit(1); });\n",
+      "let input = ''; process.stdin.on('data', (d) => (input += d));\n" +
+      "process.stdin.on('end', () => { fs.writeFileSync(path.join(__dirname, 'argv.json'), JSON.stringify(process.argv.slice(2))); fs.writeFileSync(path.join(__dirname, 'steps.ndjson'), input); process.exit(1); });\n",
   );
   fs.writeFileSync(path.join(dir, "guide.json"), JSON.stringify(GUIDE));
   fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify({ cookies: [], origins: [] }));
-  return { dir, argv: () => JSON.parse(fs.readFileSync(path.join(pkg, "dist", "argv.json"), "utf8")), cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
+  return {
+    dir,
+    argv: () => JSON.parse(fs.readFileSync(path.join(pkg, "dist", "argv.json"), "utf8")),
+    steps: () => fs.readFileSync(path.join(pkg, "dist", "steps.ndjson"), "utf8").trim().split("\n").map((l) => JSON.parse(l)),
+    cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
+  };
 }
 
 test("validate-guide --storage-state is passed to the spawned door as the wrapper's own --storage-state; --json records the UNKNOWN on exit 3", async () => {
@@ -235,6 +241,43 @@ test("validate-guide --json naming the --storage-state file, or found behind an 
     assert.equal(await main(["validate-guide", "--file", "", "guide.json", page, "--root", p.dir, "--json", page], (s) => shifted.push(s)), 2);
     assert.deepEqual(shifted, [`design-kit: --json ${page} is one of validate-guide's inputs; refusing to overwrite it`]);
     assert.equal(fs.existsSync(page), true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- review round 6
+
+const isSheetCheck = (step) => step.action === "pageEvaluate" && step.payload.expression.includes("performance.getEntriesByType('resource')");
+
+test("validate-guide and check-states read the stylesheet-load check before the page is read and again after", async () => {
+  const p = stubDoorProject();
+  try {
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir], () => undefined), 3);
+    const steps = p.steps();
+    assert.deepEqual(steps.map((st) => (isSheetCheck(st) ? "sheets" : st.action)), ["sheets", "discover", "getDesignSnapshot", "pageEvaluate", "sheets"]);
+
+    const page = path.join(p.dir, "specimen.html");
+    fs.writeFileSync(page, '<!doctype html><script type="application/json" id="dk-specimen-cells">[{"component":"Button","variant":"primary","state":"hover","id":"c1","target":"b1"}]</script>');
+    await main(["check-states", page, "--root", p.dir, "--file", "coverage.json"], () => undefined);
+    const cs = p.steps().map((st) => (isSheetCheck(st) ? "sheets" : st.action));
+    assert.equal(cs[0], "sheets");
+    assert.equal(cs.at(-1), "sheets");
+  } finally {
+    p.cleanup();
+  }
+});
+
+test("validate-guide --json naming a hard link to the guide is refused as an input, and both names are kept", async () => {
+  const p = stubDoorProject();
+  try {
+    const link = path.join(p.dir, "guide-link.json");
+    fs.linkSync(path.join(p.dir, "guide.json"), link);
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "guide-link.json"], (s) => lines.push(s)), 2);
+    assert.deepEqual(lines, [`design-kit: --json ${link} is one of validate-guide's inputs; refusing to overwrite it`]);
+    assert.equal(fs.existsSync(link), true);
+    assert.equal(fs.existsSync(path.join(p.dir, "guide.json")), true);
   } finally {
     p.cleanup();
   }

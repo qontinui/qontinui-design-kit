@@ -4,7 +4,7 @@
 // that predates the module.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { stylesheetLoad } from "../dist/door/stylesheets.js";
+import { mergeStylesheetLoads, stylesheetLoad } from "../dist/door/stylesheets.js";
 
 const PAGE = "http://127.0.0.1:5/p.html";
 
@@ -21,4 +21,12 @@ test("a sheet that did not load is listed once, under failed, even when the page
     stylesheetLoad({ requested: 1, failed: [], unreadable: ["http://127.0.0.1:5/a.css"], pending: ["http://127.0.0.1:5/a.css", "http://127.0.0.1:5/b.css"] }, PAGE, ["/a.css"]),
     { requested: 1, failed: ["/a.css"], unreadable: [], pending: ["/b.css"] },
   );
+});
+
+test("a sheet pending when the page was first read stays pending though it loaded by the last read; failures from either read count", () => {
+  const before = { requested: 1, failed: ["/gone.css"], unreadable: [], pending: ["/late.css"] };
+  const after = { requested: 2, failed: [], unreadable: ["http://cdn/x.css"], pending: [] };
+  assert.deepEqual(mergeStylesheetLoads(before, after), { requested: 2, failed: ["/gone.css"], unreadable: ["http://cdn/x.css"], pending: ["/late.css"] });
+  assert.equal(mergeStylesheetLoads(null, after), null);
+  assert.equal(mergeStylesheetLoads(before, null), null);
 });

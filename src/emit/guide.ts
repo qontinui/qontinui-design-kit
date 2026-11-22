@@ -110,8 +110,8 @@ function record(entries: Entry[], prefix: string, map: (e: Entry) => string = (e
  * A length in px for ORDERING and for a media query: px as written, `rem` and
  * `em` at the 16px initial font size (a media query resolves `em` against the
  * initial value, not an element). Null for anything else. The guide still
- * writes an `em` font size or tracking as `em` (see `canonical`); this is only
- * how two lengths are compared.
+ * writes an `em` tracking as `em` (see `canonical`); this is only how two
+ * lengths are compared.
  */
 const lengthPx = (s: string): number | null => {
   const m = /^(-?\d*\.?\d+)(px|rem|em)$/.exec(s.trim());

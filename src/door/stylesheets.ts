@@ -118,6 +118,21 @@ export function stylesheetLoad(pageValue: unknown, pageUrl: string, missed: read
   return { requested: v.requested, failed, unreadable: rest(v.unreadable), pending: rest(v.pending) };
 }
 
+/**
+ * The check is read before the page's elements are read and again after (the
+ * door's steps run one after another), so a sheet still loading at the first
+ * read stays pending though it loaded by the last: the snapshot between them
+ * may have read the page without it. A failure or an unreadable sheet at
+ * either read counts. Null when either read gave no answer.
+ */
+export function mergeStylesheetLoads(before: StylesheetLoad | null, after: StylesheetLoad | null): StylesheetLoad | null {
+  if (before === null || after === null) return null;
+  const union = (a: string[], b: string[]): string[] => [...new Set([...a, ...b])].sort();
+  const failed = union(before.failed, after.failed);
+  const rest = (a: string[], b: string[]): string[] => union(a, b).filter((f) => !failed.includes(f));
+  return { requested: after.requested, failed, unreadable: rest(before.unreadable, after.unreadable), pending: rest(before.pending, after.pending) };
+}
+
 /** The UNKNOWN a stylesheet that did not load reads as. */
 export const stylesheetMissing = (failed: readonly string[]): string => `unknown(stylesheet-missing): ${failed.join(", ")} did not load`;
 

@@ -90,8 +90,9 @@ const COMMANDS = ["compile", "status", "diff", "lint-classes", "specimen", "chec
 function samePath(a: string, b: string): boolean {
   if (a === b) return true;
   try {
-    const x = fs.statSync(a);
-    const y = fs.statSync(b);
+    // bigint: a 64-bit file id (NTFS) loses its low bits as a Number.
+    const x = fs.statSync(a, { bigint: true });
+    const y = fs.statSync(b, { bigint: true });
     return x.dev === y.dev && x.ino === y.ino;
   } catch {
     return false;

@@ -198,3 +198,11 @@ test("an alias under a shadow key that is not a shadow field is refused naming t
   assert.equal(r.code, 2);
   assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {color.glow.primary} fills toString, which is not a shadow field"]);
 });
+
+// ---------------------------------------------------------------- review round 6
+
+test("a shadow-object key named layer is not a shadow field: its alias is refused, not dropped", async () => {
+  const r = await cli(glowSource({ offsetX: px(0), offsetY: px(0), blur: px(2), color: "#000000", layer: "{space.depth.base}" }, { base: leaf("shadow", { offsetX: px(0), offsetY: px(1), blur: px(4), color: "#000000" }, "authored(finding-glow)") }));
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {space.depth.base} fills layer, which is not a shadow field"]);
+});

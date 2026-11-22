@@ -114,15 +114,17 @@ const EMBEDDED_ALIAS = /\{[^{}\s]+\}/;
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-/** The leaf type a shadow field alias must name, by the field it fills (`layer`: an element of a shadow array). */
+/** The leaf type a shadow field alias must name, by the field it fills. */
 const SHADOW_SLOT_TYPES: Readonly<Record<string, ValueType>> = {
   color: "color",
   offsetX: "dimension",
   offsetY: "dimension",
   blur: "dimension",
   spread: "dimension",
-  layer: "shadow",
 };
+
+/** The slot of an element of a shadow array: not a string, so no object key can be mistaken for it. */
+const LAYER = Symbol("shadow-array element");
 
 /** A leaf's value with every alias resolved, and the spelling `tokens.css` writes (a composite field alias as its variable). */
 interface Resolved {
@@ -167,10 +169,10 @@ function entriesFor(leaves: Leaf[]): Entry[] {
     if (whole !== null) return resolveLeaf(targetOf(l.path, whole), next);
     return resolveParts(l.value, l, next, true, null);
   };
-  // `slot` is the shadow field a value fills (`layer` for an array element), or null.
-  const resolveParts = (v: unknown, owner: Leaf, trail: string[], top: boolean, slot: string | null): Resolved => {
+  // `slot` is the shadow field a value fills (LAYER for an array element), or null.
+  const resolveParts = (v: unknown, owner: Leaf, trail: string[], top: boolean, slot: string | typeof LAYER | null): Resolved => {
     if (Array.isArray(v)) {
-      const parts = v.map((x) => resolveParts(x, owner, trail, false, "layer"));
+      const parts = v.map((x) => resolveParts(x, owner, trail, false, LAYER));
       return { value: parts.map((p) => p.value), css: parts.map((p) => p.css) };
     }
     if (isPlainObject(v)) {
@@ -194,13 +196,14 @@ function entriesFor(leaves: Leaf[]): Entry[] {
       if (!EMITTED_GROUPS.includes(t.group)) {
         throw new SourceError([`leaf ${owner.path}: alias {${field}} names a leaf in ${t.group}, which emits no CSS variable to read`]);
       }
-      const need = slot !== null && Object.hasOwn(SHADOW_SLOT_TYPES, slot) ? SHADOW_SLOT_TYPES[slot] : undefined;
-      if (need === undefined) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${slot ?? "no field"}, which is not a shadow field`]);
+      const need = slot === LAYER ? "shadow" : typeof slot === "string" && Object.hasOwn(SHADOW_SLOT_TYPES, slot) ? SHADOW_SLOT_TYPES[slot] : undefined;
+      const where = slot === LAYER ? "a shadow-array element" : (slot ?? "no field");
+      if (need === undefined) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${where}, which is not a shadow field`]);
       // Resolve first, so a broken or cyclic chain behind the target is named as such, not as a type mismatch.
       const value = resolveLeaf(t, trail).value;
       const got = typeOf(t);
-      if (got !== need) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${slot}, which needs a ${need} leaf; ${t.path} is ${got ?? "untyped"}`]);
-      if (slot === "layer" && Array.isArray(value)) {
+      if (got !== need) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${where}, which needs a ${need} leaf; ${t.path} is ${got ?? "untyped"}`]);
+      if (slot === LAYER && Array.isArray(value)) {
         throw new SourceError([`leaf ${owner.path}: alias {${field}} names a multi-layer shadow; a shadow-array element is one layer`]);
       }
       return { value, css: `var(${varName(t.path)})` };

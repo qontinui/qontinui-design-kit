@@ -14,7 +14,7 @@
  * error, selected) is compared with the same variant's default cell.
  */
 import { evalValue, openPage, runDoor, type DoorLine, type DoorStep } from "../door/inject.js";
-import { STYLESHEET_LOAD_EXPRESSION, stylesheetLoad, stylesheetUnknown, type StylesheetLoad } from "../door/stylesheets.js";
+import { STYLESHEET_LOAD_EXPRESSION, mergeStylesheetLoads, stylesheetLoad, stylesheetUnknown, type StylesheetLoad } from "../door/stylesheets.js";
 import { FORCEABLE_STATES, type State } from "../kit/define.js";
 import type { Cell } from "./cells.js";
 import { TOKEN_VALUES_EXPRESSION, classifyDelta, visualDiff, type Diff } from "./delta.js";
@@ -99,7 +99,11 @@ export async function checkStates(target: string, rootDir: string): Promise<Stat
   try {
     const cells = await fetchCells(page.url);
     if (cells.length === 0) throw new Error(`${target}: the specimen lists no cells; a check that measured nothing is UNKNOWN, not complete`);
-    const steps: DoorStep[] = [{ action: "discover", payload: {} }];
+    // The stylesheet check brackets the measurement (the first and last steps), as validate-guide's does.
+    const steps: DoorStep[] = [
+      { action: "pageEvaluate", payload: { expression: STYLESHEET_LOAD_EXPRESSION } },
+      { action: "discover", payload: {} },
+    ];
     const stepOf = new Map<string, number>();
     for (const c of cells) {
       if (c.state === "focus-visible") continue;
@@ -122,7 +126,10 @@ export async function checkStates(target: string, rootDir: string): Promise<Stat
     const tokenValue = evalValue(run.lines[tokenStep]) as { count?: number; values?: string[] } | undefined;
     const tokenValues = new Set(tokenValue?.values ?? []);
     // Known only when every linked sheet loaded AND the page declares a token other than the kit's own state list.
-    const stylesheets = stylesheetLoad(evalValue(run.lines[sheetStep]), page.url, page.missed());
+    const stylesheets = mergeStylesheetLoads(
+      stylesheetLoad(evalValue(run.lines[0]), page.url, []),
+      stylesheetLoad(evalValue(run.lines[sheetStep]), page.url, page.missed()),
+    );
     const tokensUnknown =
       stylesheets === null
         ? `unknown(instrument-cannot-read): ${instrument} did not answer the stylesheet-load check`
