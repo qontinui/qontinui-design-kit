@@ -61,8 +61,10 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
   const failed = [];
   const pending = [];
   const unreadable = [];
-  // A disabled link has no sheet by design; one whose type is not CSS is never fetched. Neither is counted.
-  const links = Array.from(document.querySelectorAll('link[rel~="stylesheet" i]')).filter((l) => !l.disabled && (!l.type || l.type.trim().toLowerCase() === 'text/css'));
+  // A disabled link has no sheet by design; one whose type is not CSS (by MIME essence: "text/css; charset=utf-8"
+  // is CSS) is never fetched. Neither is counted.
+  const isCss = (t) => t.split(';')[0].trim().toLowerCase() === 'text/css';
+  const links = Array.from(document.querySelectorAll('link[rel~="stylesheet" i]')).filter((l) => !l.disabled && (!l.type || isCss(l.type)));
   for (const l of links) {
     // An empty href resolves to the page itself and never loads: a sheet that did not load, not one still loading.
     const raw = l.getAttribute('href');

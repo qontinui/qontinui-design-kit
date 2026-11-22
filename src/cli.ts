@@ -40,7 +40,8 @@ options
                      element, unmatched rules, stylesheets, instrument, exit code and, on exit 3, the
                      unknown(...) reason; relative to --root
 
-exit codes: 0 ok, 1 drift or findings, 2 refused or misused, 3 UNKNOWN (the instrument could not measure)
+exit codes: 0 ok, 1 drift or findings, 2 refused or misused, 3 UNKNOWN (the instrument could not measure);
+a validate-guide --json report that cannot be written exits 2 after the verdict is printed
 `;
 
 interface Args {

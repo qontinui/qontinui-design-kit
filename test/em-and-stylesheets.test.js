@@ -516,3 +516,16 @@ test("validate-guide: a URL target the server redirects to another page (a login
   assert.deepEqual(r.lines, [`design-kit: ${why}`]);
   assert.equal(r.report.unknown, why);
 });
+
+// ---------------------------------------------------------------- review round 16
+
+test("validate-guide: a link typed text/css with a parameter is a CSS link, so its 404 on a URL target did not load (exit 3)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("typed-param", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" type="text/css; charset=utf-8" href="/gone.css">')],
+    "/tokens.css": [200, "text/css", TOKENS],
+    "/gone.css": [404, "text/css", "/* not here */"],
+  });
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.report.stylesheets, { requested: 2, failed: ["/gone.css"], unreadable: [], pending: [] });
+});
