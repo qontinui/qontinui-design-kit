@@ -6,11 +6,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { canonical } from "../dist/index.js";
+import { canonical, compileSource } from "../dist/index.js";
 import { main } from "../dist/cli.js";
 import { openPage, serveDir } from "../dist/door/inject.js";
+import { stylesheetLoad } from "../dist/door/stylesheets.js";
 import { ROOT } from "./helpers.js";
 import { needDoor, tmpDir, writeSpecimen } from "./kit-helpers.js";
+import { leaf, mkProject } from "./project.js";
 
 test("canonical keeps an em length as written and converts only rem at the 16px root", () => {
   assert.equal(canonical("0.05em"), "0.05em");
@@ -88,14 +90,14 @@ test("validate-guide: a page whose linked tokens.css 404s exits 3 naming it; wit
       "design-kit: unknown(stylesheet-missing): /tokens.css did not load; a guide evaluated without its stylesheets reads browser defaults, not the page",
     ]);
     const unknown = JSON.parse(fs.readFileSync(json, "utf8"));
-    assert.deepEqual([unknown.exitCode, unknown.stylesheets], [3, { requested: 1, failed: ["/tokens.css"] }]);
+    assert.deepEqual([unknown.exitCode, unknown.stylesheets], [3, { requested: 1, failed: ["/tokens.css"], unreadable: [] }]);
 
     fs.writeFileSync(path.join(dir, "tokens.css"), ":root { --dk-text: #111111; }\n");
     const present = [];
     assert.equal(await main(["validate-guide", guide, page, "--root", ROOT, "--json", json], (s) => present.push(s)), 0);
     assert.match(present.at(-1), /^design-kit validate-guide: \d+ elements, 1 rules, 0 failures \(@qontinui\/ui-bridge-wrapper@0\.12\.0\)$/);
     const report = JSON.parse(fs.readFileSync(json, "utf8"));
-    assert.deepEqual([report.exitCode, report.unknown, report.stylesheets], [0, null, { requested: 1, failed: [] }]);
+    assert.deepEqual([report.exitCode, report.unknown, report.stylesheets], [0, null, { requested: 1, failed: [], unreadable: [] }]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -127,7 +129,7 @@ test("check-states: a specimen whose linked token sheet 404s is unknown, never m
     const { code, lines, cov } = await runCheckStates(sp);
     assert.equal(code, 3);
     assert.equal(cov.summary.measured, 0);
-    assert.deepEqual(cov.stylesheets, { requested: 1, failed: ["/tokens.css"] });
+    assert.deepEqual(cov.stylesheets, { requested: 1, failed: ["/tokens.css"], unreadable: [] });
     assert.equal(nonBaseline(cov).length, 36);
     for (const c of nonBaseline(cov)) assert.equal(c.unknown, "unknown(stylesheet-missing): /tokens.css did not load", c.id);
     assert.match(lines.join("\n"), /unknown\(stylesheet-missing\): \/tokens\.css did not load/);
@@ -144,7 +146,7 @@ test("check-states: the kit's own --dk-kit-states does not make a page with no t
     const { code, cov } = await runCheckStates(sp);
     assert.equal(code, 3);
     assert.equal(cov.summary.measured, 0);
-    assert.deepEqual(cov.stylesheets, { requested: 0, failed: [] });
+    assert.deepEqual(cov.stylesheets, { requested: 0, failed: [], unreadable: [] });
     for (const c of nonBaseline(cov)) assert.equal(c.unknown, "unknown(no-token-values): the page declares no --dk-* custom property other than --dk-kit-states", c.id);
   } finally {
     sp.cleanup();
@@ -159,8 +161,114 @@ test("check-states: the same specimen with its linked token sheet present is mea
     const { code, cov } = await runCheckStates(sp);
     assert.equal(code, 0);
     assert.deepEqual(cov.summary, { cells: 56, measured: 36, baseline: 10, unknown: 10, findings: 0 });
-    assert.deepEqual(cov.stylesheets, { requested: 1, failed: [] });
+    assert.deepEqual(cov.stylesheets, { requested: 1, failed: [], unreadable: [] });
   } finally {
     sp.cleanup();
   }
+});
+
+// ---------------------------------------------------------------- review round 1
+
+/** An app server that is not the kit's: `/route` is the page, `/ok.css` and (once `served`) `/tokens.css` are CSS, the rest 404 with an HTML body. */
+async function appServer(page, { served = () => false } = {}) {
+  const app = http.createServer((req, res) => {
+    if (req.url.startsWith("/route")) {
+      res.setHeader("content-type", "text/html");
+      res.end(page);
+    } else if (req.url === "/tokens.css" && served()) {
+      res.setHeader("content-type", "text/css");
+      res.end(":root { --dk-text: #111111; }\n");
+    } else {
+      res.statusCode = 404;
+      res.setHeader("content-type", "text/html");
+      res.end("<!doctype html><h1>404</h1>");
+    }
+  });
+  await new Promise((r) => app.listen(0, "127.0.0.1", r));
+  return { url: `http://127.0.0.1:${app.address().port}`, close: () => new Promise((r) => app.close(r)) };
+}
+
+test("validate-guide on a URL target the kit does not serve: a 404 stylesheet exits 3 naming it, and the served sheet exits 0", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const dir = tmpDir("urltarget");
+  let served = false;
+  const app = await appServer(PAGE.replace('href="tokens.css"', 'href="/tokens.css"'), { served: () => served });
+  try {
+    const guide = path.join(dir, "guide.json");
+    const json = path.join(dir, "report.json");
+    fs.writeFileSync(guide, JSON.stringify(GUIDE));
+    const missing = [];
+    assert.equal(await main(["validate-guide", guide, `${app.url}/route`, "--root", ROOT, "--json", json], (s) => missing.push(s)), 3);
+    assert.deepEqual(missing, [
+      "design-kit: unknown(stylesheet-missing): /tokens.css did not load; a guide evaluated without its stylesheets reads browser defaults, not the page",
+    ]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: ["/tokens.css"], unreadable: [] });
+    served = true;
+    const present = [];
+    assert.equal(await main(["validate-guide", guide, `${app.url}/route`, "--root", ROOT, "--json", json], (s) => present.push(s)), 0);
+    assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: [], unreadable: [] });
+  } finally {
+    await app.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("validate-guide: a sheet from another origin whose rules cannot be read is unknown(stylesheet-unreadable), not 'did not load'", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const dir = tmpDir("crossorigin");
+  const sheets = await appServer("", { served: () => true });
+  const app = await appServer(PAGE.replace('href="tokens.css"', `href="${"__SHEETS__"}/tokens.css"`).replace("__SHEETS__", sheets.url));
+  try {
+    const guide = path.join(dir, "guide.json");
+    const json = path.join(dir, "report.json");
+    fs.writeFileSync(guide, JSON.stringify(GUIDE));
+    const lines = [];
+    assert.equal(await main(["validate-guide", guide, `${app.url}/route`, "--root", ROOT, "--json", json], (s) => lines.push(s)), 3);
+    assert.deepEqual(lines, [
+      `design-kit: unknown(stylesheet-unreadable): ${sheets.url}/tokens.css cannot be read (another origin, no CORS), so whether it carries the page's styles is unknown`,
+    ]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: [], unreadable: [`${sheets.url}/tokens.css`] });
+  } finally {
+    await app.close();
+    await sheets.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("stylesheetLoad names a percent-encoded sheet once, by its decoded path; an answer with no lists is UNKNOWN (null)", () => {
+  assert.deepEqual(
+    stylesheetLoad({ requested: 1, failed: ["http://127.0.0.1:5/my%20sheet.css"], unreadable: [] }, "http://127.0.0.1:5/p.html", ["/my sheet.css"]),
+    { requested: 1, failed: ["/my sheet.css"], unreadable: [] },
+  );
+  assert.equal(stylesheetLoad({ requested: 1, failed: [] }, "http://127.0.0.1:5/p.html", []), null);
+});
+
+const em = (value) => ({ value, unit: "em" });
+
+async function guideOf(source) {
+  const p = mkProject({ $extensions: { qontinui: { name: "fixture" } }, ...source });
+  try {
+    const { outputs } = await compileSource({ sourcePath: p.sourcePath, rootDir: p.dir });
+    return JSON.parse(outputs["fixture.styleguide.uibridge.json"]);
+  } finally {
+    p.cleanup();
+  }
+}
+
+test("an em breakpoint is px at the 16px initial font size in the guide; a breakpoint in no convertible unit is refused, not dropped", async () => {
+  const g = await guideOf({ layout: { breakpoint: { md: leaf("dimension", em(48), "authored(f-bp)"), lg: leaf("dimension", { value: 1024, unit: "px" }, "authored(f-bp)") } } });
+  assert.deepEqual(g.tokens.breakpoints, { lg: 1024, md: 768 });
+  const p = mkProject({ $extensions: { qontinui: { name: "fixture" } }, layout: { breakpoint: { wide: leaf("dimension", "50vw", "authored(f-bp)") } } });
+  try {
+    await assert.rejects(compileSource({ sourcePath: p.sourcePath, rootDir: p.dir }), {
+      message: "layout.breakpoint.wide is 50vw; a guide breakpoint is a px, rem or em length",
+    });
+  } finally {
+    p.cleanup();
+  }
+});
+
+test("an em type scale's heading rule still excludes the body step", async () => {
+  const g = await guideOf({ type: { scale: { sm: leaf("dimension", em(0.875), "authored(f-s)"), md: leaf("dimension", em(1), "authored(f-s)"), lg: leaf("dimension", em(1.5), "authored(f-s)") } } });
+  assert.deepEqual(g.rules.find((r) => r.id === "heading-size-on-scale").constraints[0].values, ["1.5em"]);
 });

@@ -121,8 +121,9 @@ interface Resolved {
 
 /**
  * Resolve `{a.b}` aliases (cycle-checked) and render every value-bearing leaf.
- * A whole `$value` may be an alias, and so may each field of a composite value
- * (each field of a shadow object, each element of a shadow array). An alias
+ * A whole `$value` may be an alias, and so may each field of a shadow object
+ * and each element of a shadow array; an alias inside any other composite
+ * value (a font-family list, a cubic-bezier) is refused. An alias
  * that names no leaf, an undeclared leaf, or a leaf that emits no variable is
  * refused; so is an alias embedded in a longer string, which would otherwise
  * reach the CSS as literal `{a.b}` text.
@@ -160,6 +161,9 @@ function entriesFor(leaves: Leaf[]): Entry[] {
     if (typeof v !== "string") return { value: v, css: v };
     const field = top ? null : aliasTarget(v);
     if (field !== null) {
+      if (owner.type !== "shadow") {
+        throw new SourceError([`leaf ${owner.path}: alias {${field}} inside a ${owner.type ?? "untyped"} value; only a shadow's fields and layers may be aliases`]);
+      }
       const t = targetOf(owner.path, field);
       if (!EMITTED_GROUPS.includes(t.group)) {
         throw new SourceError([`leaf ${owner.path}: alias {${field}} names a leaf in ${t.group}, which emits no CSS variable to read`]);

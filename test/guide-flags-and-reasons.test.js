@@ -143,11 +143,24 @@ test("validate-guide --json writes a report whose failures match the stdout ERRO
     assert.equal(report.unknown, null);
     assert.equal(report.elements, 1);
     assert.equal(report.rules, 14);
-    assert.deepEqual(report.stylesheets, { requested: 0, failed: [] });
+    assert.deepEqual(report.stylesheets, { requested: 0, failed: [], unreadable: [] });
     assert.equal(report.instrument, "@qontinui/ui-bridge-wrapper@0.12.0");
     assert.ok(report.unmatchedRules.includes("tabs-states-declared"));
     assert.equal(report.target, hand);
   } finally {
     sp.cleanup();
+  }
+});
+
+test("validate-guide's flags on another command are refused (exit 2)", async () => {
+  const dir = tmpDir("flags");
+  try {
+    for (const argv of [["compile", "--json", "x.json"], ["check-states", "page.html", "--storage-state", "s.json"]]) {
+      const lines = [];
+      assert.equal(await main([...argv, "--root", dir], (s) => lines.push(s)), 2, argv.join(" "));
+      assert.equal(lines[0].split("\n")[0], "design-kit: --storage-state and --json apply to validate-guide only");
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

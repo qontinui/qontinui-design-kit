@@ -90,3 +90,13 @@ test("a source importing the three groups compiles them as resolved, emits them,
     p.cleanup();
   }
 });
+
+test("a fontWeights or lineHeights entry that is not a number is refused with the key named", () => {
+  const fake = (exports) => ({ label: "@qontinui/design-tokens@x", version: "x", ref: null, sha: null, exports });
+  assert.throws(() => tokenLeaves(fake({ fontWeights: { regular: "400" } }), ["fontWeights"], null), {
+    message: '@qontinui/design-tokens@x fontWeights.regular is "400"; the adapter reads only a number',
+  });
+  assert.throws(() => tokenLeaves(fake({ lineHeights: { tight: "1.1" } }), ["lineHeights"], null), {
+    message: '@qontinui/design-tokens@x lineHeights.tight is "1.1"; the adapter reads only a number',
+  });
+});

@@ -143,6 +143,12 @@ function flatten(prefix: string, obj: Record<string, unknown>, out: [string, str
   }
 }
 
+/** A typography number; anything else is refused with the key named, never skipped into a silently smaller group. */
+function numberOf(pkg: TokenPackage, group: string, key: string, v: unknown): number {
+  if (typeof v !== "number" || !Number.isFinite(v)) throw new Error(`${pkg.label} ${group}.${key} is ${JSON.stringify(v)}; the adapter reads only a number`);
+  return v;
+}
+
 /** `"0.04em"` -> `{ value: 0.04, unit: "em" }`; any other spelling is refused with the key named. */
 function emLength(pkg: TokenPackage, key: string, v: unknown): { value: number; unit: "em" } {
   const m = typeof v === "string" ? /^(-?\d*\.?\d+)em$/.exec(v) : null;
@@ -198,12 +204,12 @@ export function tokenLeaves(pkg: TokenPackage, groups: ImportGroup[] | null, sur
   if (wanted.has("fontWeights")) {
     const w = pkg.exports["fontWeights"];
     if (!isRecord(w)) missing("fontWeights", "type.weight");
-    else for (const [k, n] of Object.entries(w)) if (typeof n === "number") leaves.push(leaf(pkg, `type.weight.${k}`, "fontWeight", n));
+    else for (const [k, n] of Object.entries(w)) leaves.push(leaf(pkg, `type.weight.${k}`, "fontWeight", numberOf(pkg, "fontWeights", k, n)));
   }
   if (wanted.has("lineHeights")) {
     const h = pkg.exports["lineHeights"];
     if (!isRecord(h)) missing("lineHeights", "type.leading");
-    else for (const [k, n] of Object.entries(h)) if (typeof n === "number") leaves.push(leaf(pkg, `type.leading.${k}`, "number", n));
+    else for (const [k, n] of Object.entries(h)) leaves.push(leaf(pkg, `type.leading.${k}`, "number", numberOf(pkg, "lineHeights", k, n)));
   }
   if (wanted.has("letterSpacings")) {
     const t = pkg.exports["letterSpacings"];

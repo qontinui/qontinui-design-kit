@@ -10,7 +10,7 @@
  */
 import fs from "node:fs";
 import { evalValue, openPage, runDoor } from "../door/inject.js";
-import { STYLESHEET_LOAD_EXPRESSION, stylesheetLoad, stylesheetMissing, type StylesheetLoad } from "../door/stylesheets.js";
+import { STYLESHEET_LOAD_EXPRESSION, stylesheetLoad, stylesheetMissing, stylesheetUnreadable, type StylesheetLoad } from "../door/stylesheets.js";
 import type { StyleConstraint, StyleGuideConfig, StyleRule } from "../emit/guide.js";
 
 export interface GuideFailure {
@@ -29,7 +29,7 @@ export interface GuideReport {
   failures: GuideFailure[];
   /** Rules that matched no element on the page: not a failure, but not a pass either. */
   unmatchedRules: string[];
-  /** The page's linked stylesheets; any failed one makes the run UNKNOWN (exit 3), never a verdict. */
+  /** The page's linked stylesheets; a failed or unreadable one makes the run UNKNOWN (exit 3), never a verdict. */
   stylesheets: StylesheetLoad;
   instrument: string;
 }
@@ -226,6 +226,7 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
     if (stylesheets.failed.length > 0) {
       throw unknownVerdict(`${stylesheetMissing(stylesheets.failed)}; a guide evaluated without its stylesheets reads browser defaults, not the page`);
     }
+    if (stylesheets.unreadable.length > 0) throw unknownVerdict(stylesheetUnreadable(stylesheets.unreadable));
     if (snap.elements.length === 0) throw unknownVerdict("unknown(no-elements): the page returned no registered elements; a guide that read nothing is not a pass");
     if (snap.truncated) throw unknownVerdict("unknown(snapshot-truncated): the page has more elements than one snapshot returns");
     if (canon.length !== pairs.length) throw unknownVerdict("unknown(instrument-cannot-read): the canonicalisation answered a different number of values than asked");

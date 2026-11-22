@@ -94,24 +94,36 @@ function record(entries: Entry[], prefix: string, map: (e: Entry) => string = (e
   return out;
 }
 
-const px = (s: string): number | null => {
-  const m = /^(-?\d*\.?\d+)px$/.exec(s);
-  return m ? parseFloat(m[1] as string) : null;
+/**
+ * A length in px for ORDERING and for a media query: px as written, `rem` and
+ * `em` at the 16px initial font size (a media query resolves `em` against the
+ * initial value, not an element). Null for anything else. The guide still
+ * writes an `em` font size or tracking as `em` (see `canonical`); this is only
+ * how two lengths are compared.
+ */
+const lengthPx = (s: string): number | null => {
+  const m = /^(-?\d*\.?\d+)(px|rem|em)$/.exec(s.trim());
+  if (!m) return null;
+  const v = parseFloat(m[1] as string);
+  return m[2] === "px" ? v : Math.round(v * 16 * 1000) / 1000;
 };
 
 /** Heading sizes: the declared scale steps above the `md` body step, or the whole scale when it has no `md`. */
 export function headingSizes(scale: Record<string, string>): string[] {
-  const body = scale["md"] !== undefined ? px(scale["md"]) : null;
+  const body = scale["md"] !== undefined ? lengthPx(scale["md"]) : null;
   const all = Object.values(scale);
   if (body === null) return all;
-  return all.filter((v) => (px(v) ?? 0) > body);
+  return all.filter((v) => (lengthPx(v) ?? 0) > body);
 }
 
 function tokensOf(entries: Entry[]): DesignTokens {
+  // A breakpoint the guide cannot state in px is refused, never dropped from the guide.
   const breakpoints: Record<string, number> = {};
-  for (const [k, v] of Object.entries(record(entries, "layout.breakpoint."))) {
-    const n = px(v);
-    if (n !== null) breakpoints[k] = n;
+  for (const e of under(entries, "layout.breakpoint.")) {
+    const v = canonical(e.resolvedCss);
+    const n = lengthPx(v);
+    if (n === null) throw new Error(`${e.path} is ${v}; a guide breakpoint is a px, rem or em length`);
+    breakpoints[nameAfter(e, "layout.breakpoint.")] = n;
   }
   return {
     colors: record(entries, "color."),

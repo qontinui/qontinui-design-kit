@@ -103,3 +103,27 @@ test("the single-light-source band reads array shadows: a layer lit from below a
   const same = await compile(glowSource([lit(1), lit(2)], { sm: leaf("shadow", lit(3), "authored(finding-glow)") }));
   assert.deepEqual(same.report.out_of_band, []);
 });
+
+// ---------------------------------------------------------------- review round 1
+
+test("a field alias outside a shadow is refused: a fontFamily list element naming another family", async () => {
+  const r = await cli({
+    $extensions: { qontinui: { name: "fixture" } },
+    type: { family: { brand: leaf("fontFamily", "Inter, system-ui", "declared"), body: leaf("fontFamily", ["{type.family.brand}", "sans-serif"], "declared") } },
+  });
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf type.family.body: alias {type.family.brand} inside a fontFamily value; only a shadow's fields and layers may be aliases"]);
+});
+
+test("a shadow field alias naming a leaf in a group that emits no variable is refused", async () => {
+  const source = glowSource({ offsetX: px(0), offsetY: px(0), blur: px(12), color: "{budgets.density.max}" });
+  source.budgets = { density: { max: leaf("number", 24, "authored(finding-glow)") } };
+  const r = await cli(source);
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {budgets.density.max} names a leaf in budgets, which emits no CSS variable to read"]);
+});
+
+test("a shadow layer with no colour, and an empty shadow list, are refused", async () => {
+  await assert.rejects(compile(glowSource({ offsetX: px(0), offsetY: px(0), blur: px(2) })), /^Error: leaf space\.depth\.glow: cannot render .* as shadow \(a shadow layer needs a color\)$/);
+  await assert.rejects(compile(glowSource([])), /^Error: leaf space\.depth\.glow: cannot render \[\] as shadow \(an empty shadow list\)$/);
+});

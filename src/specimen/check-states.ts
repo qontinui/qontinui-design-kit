@@ -14,7 +14,7 @@
  * error, selected) is compared with the same variant's default cell.
  */
 import { evalValue, openPage, runDoor, type DoorLine, type DoorStep } from "../door/inject.js";
-import { STYLESHEET_LOAD_EXPRESSION, stylesheetLoad, stylesheetMissing, type StylesheetLoad } from "../door/stylesheets.js";
+import { STYLESHEET_LOAD_EXPRESSION, stylesheetLoad, stylesheetMissing, stylesheetUnreadable, type StylesheetLoad } from "../door/stylesheets.js";
 import { FORCEABLE_STATES, type State } from "../kit/define.js";
 import type { Cell } from "./cells.js";
 import { TOKEN_VALUES_EXPRESSION, classifyDelta, visualDiff, type Diff } from "./delta.js";
@@ -49,7 +49,7 @@ export interface StateCoverage {
   /** The published door that measured, e.g. `@qontinui/ui-bridge-wrapper@0.12.0`. */
   instrument: string;
   summary: { cells: number; measured: number; baseline: number; unknown: number; findings: number };
-  /** The page's linked stylesheets; null when the instrument did not answer. A failed sheet makes every cell UNKNOWN. */
+  /** The page's linked stylesheets; null when the instrument did not answer. A failed or unreadable sheet makes every cell UNKNOWN. */
   stylesheets: StylesheetLoad | null;
   findings: { id: string; finding: "no-delta" | "non-token-delta"; detail: string }[];
   cells: CellResult[];
@@ -128,9 +128,11 @@ export async function checkStates(target: string, rootDir: string): Promise<Stat
         ? `unknown(instrument-cannot-read): ${instrument} did not answer the stylesheet-load check`
         : stylesheets.failed.length > 0
           ? stylesheetMissing(stylesheets.failed)
-          : (tokenValue?.count ?? 0) > 0
-            ? null
-            : "unknown(no-token-values): the page declares no --dk-* custom property other than --dk-kit-states";
+          : stylesheets.unreadable.length > 0
+            ? stylesheetUnreadable(stylesheets.unreadable)
+            : (tokenValue?.count ?? 0) > 0
+              ? null
+              : "unknown(no-token-values): the page declares no --dk-* custom property other than --dk-kit-states";
 
     const defaultStyles = new Map<string, Record<string, unknown>>();
     for (const c of cells) {

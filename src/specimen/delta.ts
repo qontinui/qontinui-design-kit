@@ -109,7 +109,8 @@ export function visualDiff(base: Record<string, unknown>, other: Record<string, 
  *
  * The kit's own state declaration (`--dk-kit-states`, on every component root)
  * is not a token: it is excluded from `count`, so a page whose token sheet is
- * absent but whose kit stylesheet loaded counts 0, not 8.
+ * absent but whose kit stylesheet loaded counts 0, not 1 (`count` is the
+ * number of distinct `--dk-*` names).
  */
 export const TOKEN_VALUES_EXPRESSION = `(() => {
   const names = new Set();
