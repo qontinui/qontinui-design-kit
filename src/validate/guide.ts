@@ -10,7 +10,7 @@
  */
 import fs from "node:fs";
 import { evalValue, openPage, runDoor } from "../door/inject.js";
-import { STYLESHEET_LOAD_EXPRESSION, stylesheetLoad, stylesheetMissing, stylesheetUnreadable, type StylesheetLoad } from "../door/stylesheets.js";
+import { STYLESHEET_LOAD_EXPRESSION, stylesheetLoad, stylesheetUnknown, type StylesheetLoad } from "../door/stylesheets.js";
 import type { StyleConstraint, StyleGuideConfig, StyleRule } from "../emit/guide.js";
 
 export interface GuideFailure {
@@ -29,7 +29,7 @@ export interface GuideReport {
   failures: GuideFailure[];
   /** Rules that matched no element on the page: not a failure, but not a pass either. */
   unmatchedRules: string[];
-  /** The page's linked stylesheets; a failed or unreadable one makes the run UNKNOWN (exit 3), never a verdict. */
+  /** The page's linked stylesheets; a failed, pending or unreadable one makes the run UNKNOWN (exit 3), never a verdict. */
   stylesheets: StylesheetLoad;
   instrument: string;
 }
@@ -153,37 +153,44 @@ export class GuideUnknown extends Error {
 
 /** What `validate-guide --json` writes: the report, its exit code, and on exit 3 the `unknown(...)` reason. */
 export interface GuideJson {
+  schema: 1;
   guide: string;
   target: string;
   exitCode: 0 | 1 | 3;
   /** The `unknown(...)` reason on exit 3, else null. */
   unknown: string | null;
+  /** Null on a run that stopped before it read the page's elements. */
   elements: number | null;
   rules: number;
-  failures: GuideFailure[];
-  /** Rule id -> the elements that failed it. */
-  failuresByRule: Record<string, string[]>;
-  unmatchedRules: string[];
+  /** Null on a run that stopped before it evaluated a rule: never `[]`, which would read as "nothing failed". */
+  failures: GuideFailure[] | null;
+  /** Rule id -> the elements that failed it; null as `failures`. */
+  failuresByRule: Record<string, string[]> | null;
+  unmatchedRules: string[] | null;
   stylesheets: StylesheetLoad | null;
   instrument: string | null;
 }
 
 export function guideJson(r: GuideReport | GuidePartial, exitCode: GuideJson["exitCode"], unknown: string | null): GuideJson {
-  const failures = "failures" in r ? r.failures : [];
-  const byRule: Record<string, string[]> = {};
-  for (const id of [...new Set(failures.map((f) => f.ruleId))].sort()) {
-    byRule[id] = [...new Set(failures.filter((f) => f.ruleId === id).map((f) => f.elementId))];
+  const evaluated = "failures" in r;
+  let byRule: Record<string, string[]> | null = null;
+  if (evaluated) {
+    byRule = {};
+    for (const id of [...new Set(r.failures.map((f) => f.ruleId))].sort()) {
+      byRule[id] = [...new Set(r.failures.filter((f) => f.ruleId === id).map((f) => f.elementId))];
+    }
   }
   return {
+    schema: 1,
     guide: r.guide,
     target: r.target,
     exitCode,
     unknown,
     elements: r.elements,
     rules: r.rules,
-    failures,
+    failures: evaluated ? r.failures : null,
     failuresByRule: byRule,
-    unmatchedRules: "unmatchedRules" in r ? r.unmatchedRules : [],
+    unmatchedRules: evaluated ? r.unmatchedRules : null,
     stylesheets: r.stylesheets,
     instrument: r.instrument,
   };
@@ -223,10 +230,12 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
     const stylesheets = stylesheetLoad(evalValue(run.lines[3]), page.url, page.missed());
     if (!stylesheets) throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} did not answer the stylesheet-load check`);
     known.stylesheets = stylesheets;
-    if (stylesheets.failed.length > 0) {
-      throw unknownVerdict(`${stylesheetMissing(stylesheets.failed)}; a guide evaluated without its stylesheets reads browser defaults, not the page`);
+    const sheetUnknown = stylesheetUnknown(stylesheets);
+    if (sheetUnknown !== null) {
+      throw unknownVerdict(
+        stylesheets.failed.length > 0 ? `${sheetUnknown}; a guide evaluated without its stylesheets reads browser defaults, not the page` : sheetUnknown,
+      );
     }
-    if (stylesheets.unreadable.length > 0) throw unknownVerdict(stylesheetUnreadable(stylesheets.unreadable));
     if (snap.elements.length === 0) throw unknownVerdict("unknown(no-elements): the page returned no registered elements; a guide that read nothing is not a pass");
     if (snap.truncated) throw unknownVerdict("unknown(snapshot-truncated): the page has more elements than one snapshot returns");
     if (canon.length !== pairs.length) throw unknownVerdict("unknown(instrument-cannot-read): the canonicalisation answered a different number of values than asked");

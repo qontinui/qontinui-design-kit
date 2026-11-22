@@ -16,6 +16,7 @@ import {
   type GroupName,
   type Leaf,
   type SourceKind,
+  type ValueType,
 } from "../source/schema.js";
 import { aliasTarget, cssValue } from "../source/value.js";
 import { outOfBand, type OutOfBand } from "./bands.js";
@@ -113,6 +114,16 @@ const EMBEDDED_ALIAS = /\{[^{}\s]+\}/;
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
+/** The leaf type a shadow field alias must name, by the field it fills (`layer`: an element of a shadow array). */
+const SHADOW_SLOT_TYPES: Readonly<Record<string, ValueType>> = {
+  color: "color",
+  offsetX: "dimension",
+  offsetY: "dimension",
+  blur: "dimension",
+  spread: "dimension",
+  layer: "shadow",
+};
+
 /** A leaf's value with every alias resolved, and the spelling `tokens.css` writes (a composite field alias as its variable). */
 interface Resolved {
   value: unknown;
@@ -122,8 +133,11 @@ interface Resolved {
 /**
  * Resolve `{a.b}` aliases (cycle-checked) and render every value-bearing leaf.
  * A whole `$value` may be an alias, and so may each field of a shadow object
- * and each element of a shadow array; an alias inside any other composite
- * value (a font-family list, a cubic-bezier) is refused. An alias
+ * and each element of a shadow array, provided it names a leaf of the type
+ * that field holds (`color` a colour, an offset, blur or spread a dimension,
+ * an array element a one-layer shadow; `inset` is never an alias). An alias
+ * inside any other composite value (a font-family list, a cubic-bezier) is
+ * refused. An alias
  * that names no leaf, an undeclared leaf, or a leaf that emits no variable is
  * refused; so is an alias embedded in a longer string, which would otherwise
  * reach the CSS as literal `{a.b}` text.
@@ -136,23 +150,34 @@ function entriesFor(leaves: Leaf[]): Entry[] {
     if (t.source.kind === "undeclared") throw new SourceError([`leaf ${owner}: alias {${name}} points at an undeclared leaf`]);
     return t;
   };
+  // A leaf's type, following whole-value aliases for one that states none.
+  const typeOf = (l: Leaf): ValueType | null => {
+    let cur: Leaf | undefined = l;
+    for (let hops = 0; cur && hops < leaves.length; hops++) {
+      if (cur.type !== null) return cur.type;
+      const next = aliasTarget(cur.value);
+      cur = next === null ? undefined : byLeaf.get(next);
+    }
+    return null;
+  };
   const resolveLeaf = (l: Leaf, trail: string[]): Resolved => {
     if (trail.includes(l.path)) throw new SourceError([`alias cycle: ${[...trail, l.path].join(" -> ")}`]);
     const next = [...trail, l.path];
     const whole = aliasTarget(l.value);
     if (whole !== null) return resolveLeaf(targetOf(l.path, whole), next);
-    return resolveParts(l.value, l, next, true);
+    return resolveParts(l.value, l, next, true, null);
   };
-  const resolveParts = (v: unknown, owner: Leaf, trail: string[], top: boolean): Resolved => {
+  // `slot` is the shadow field a value fills (`layer` for an array element), or null.
+  const resolveParts = (v: unknown, owner: Leaf, trail: string[], top: boolean, slot: string | null): Resolved => {
     if (Array.isArray(v)) {
-      const parts = v.map((x) => resolveParts(x, owner, trail, false));
+      const parts = v.map((x) => resolveParts(x, owner, trail, false, "layer"));
       return { value: parts.map((p) => p.value), css: parts.map((p) => p.css) };
     }
     if (isPlainObject(v)) {
       const value: Record<string, unknown> = {};
       const css: Record<string, unknown> = {};
       for (const [k, x] of Object.entries(v)) {
-        const r = resolveParts(x, owner, trail, false);
+        const r = resolveParts(x, owner, trail, false, k);
         value[k] = r.value;
         css[k] = r.css;
       }
@@ -164,11 +189,20 @@ function entriesFor(leaves: Leaf[]): Entry[] {
       if (owner.type !== "shadow") {
         throw new SourceError([`leaf ${owner.path}: alias {${field}} inside a ${owner.type ?? "untyped"} value; only a shadow's fields and layers may be aliases`]);
       }
+      if (slot === "inset") throw new SourceError([`leaf ${owner.path}: inset is true or false, never an alias`]);
       const t = targetOf(owner.path, field);
       if (!EMITTED_GROUPS.includes(t.group)) {
         throw new SourceError([`leaf ${owner.path}: alias {${field}} names a leaf in ${t.group}, which emits no CSS variable to read`]);
       }
-      return { value: resolveLeaf(t, trail).value, css: `var(${varName(t.path)})` };
+      const need = slot === null ? undefined : SHADOW_SLOT_TYPES[slot];
+      if (need === undefined) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${slot ?? "no field"}, which is not a shadow field`]);
+      const got = typeOf(t);
+      if (got !== need) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${slot}, which needs a ${need} leaf; ${t.path} is ${got ?? "untyped"}`]);
+      const value = resolveLeaf(t, trail).value;
+      if (slot === "layer" && Array.isArray(value)) {
+        throw new SourceError([`leaf ${owner.path}: alias {${field}} names a multi-layer shadow; a shadow-array element is one layer`]);
+      }
+      return { value, css: `var(${varName(t.path)})` };
     }
     // A `string` leaf is free text; any other value cannot carry an alias inside a longer string.
     if ((owner.type !== "string" || !top) && EMBEDDED_ALIAS.test(v)) {

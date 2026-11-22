@@ -73,8 +73,8 @@ test("a string shadow that embeds an alias is refused naming the leaf, never pas
 });
 
 test("an alias cycle through a composite field is refused", async () => {
-  const source = glowSource({ offsetX: px(0), offsetY: px(0), blur: px(12), color: "{space.depth.loop}" });
-  source.space.depth.loop = leaf("shadow", { offsetX: px(0), offsetY: px(1), blur: px(2), color: "{space.depth.glow}" }, "authored(finding-glow)");
+  const source = glowSource(["{space.depth.loop}"]);
+  source.space.depth.loop = leaf("shadow", ["{space.depth.glow}"], "authored(finding-glow)");
   const r = await cli(source);
   assert.equal(r.code, 2);
   assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  alias cycle: space.depth.glow -> space.depth.loop -> space.depth.glow"]);
@@ -126,4 +126,40 @@ test("a shadow field alias naming a leaf in a group that emits no variable is re
 test("a shadow layer with no colour, and an empty shadow list, are refused", async () => {
   await assert.rejects(compile(glowSource({ offsetX: px(0), offsetY: px(0), blur: px(2) })), /^Error: leaf space\.depth\.glow: cannot render .* as shadow \(a shadow layer needs a color\)$/);
   await assert.rejects(compile(glowSource([])), /^Error: leaf space\.depth\.glow: cannot render \[\] as shadow \(an empty shadow list\)$/);
+});
+
+// ---------------------------------------------------------------- review round 2
+
+const typed = (shadow, extra = {}) => ({
+  $extensions: { qontinui: { name: "fixture" } },
+  color: { glow: { primary: leaf("color", GLOW, "declared") } },
+  type: { family: { brand: leaf("fontFamily", "Inter, system-ui", "declared") } },
+  motion: { duration: { fast: leaf("duration", { value: 120, unit: "ms" }, "authored(finding-glow)") } },
+  space: { unit: leaf("dimension", px(2), "authored(finding-glow)"), depth: { glow: leaf("shadow", shadow, "authored(finding-glow)"), ...extra } },
+});
+
+test("a shadow field alias must name a leaf of the field's type; a dimension alias in an offset compiles", async () => {
+  const refused = async (shadow) => {
+    const r = await cli(typed(shadow));
+    assert.equal(r.code, 2);
+    return r.lines[0].replace("design-kit: the source was refused:\n  ", "");
+  };
+  const base = { offsetX: px(0), offsetY: px(0), blur: px(12), color: "#000000" };
+  assert.equal(await refused({ ...base, color: "{type.family.brand}" }), "leaf space.depth.glow: alias {type.family.brand} fills color, which needs a color leaf; type.family.brand is fontFamily");
+  assert.equal(await refused({ ...base, offsetX: "{color.glow.primary}" }), "leaf space.depth.glow: alias {color.glow.primary} fills offsetX, which needs a dimension leaf; color.glow.primary is color");
+  assert.equal(await refused({ ...base, blur: "{motion.duration.fast}" }), "leaf space.depth.glow: alias {motion.duration.fast} fills blur, which needs a dimension leaf; motion.duration.fast is duration");
+  assert.equal(await refused({ ...base, inset: "{color.glow.primary}" }), "leaf space.depth.glow: inset is true or false, never an alias");
+  const { outputs } = await compile(typed({ ...base, offsetY: "{space.unit}" }));
+  assert.match(outputs["tokens.css"], /^ {2}--dk-space-depth-glow: 0px var\(--dk-space-unit\) 12px 0px #000000;$/m);
+  assert.equal(JSON.parse(outputs["fixture.styleguide.uibridge.json"]).tokens.shadows.glow, "0px 2px 12px 0px #000000");
+});
+
+test("a shadow-array element alias names one layer; one naming a multi-layer shadow is refused", async () => {
+  const layer = { offsetX: px(0), offsetY: px(1), blur: px(2), color: "#000000" };
+  const { outputs } = await compile(typed(["{space.depth.base}", layer], { base: leaf("shadow", { ...layer, blur: px(4) }, "authored(finding-glow)") }));
+  assert.match(outputs["tokens.css"], /^ {2}--dk-space-depth-glow: var\(--dk-space-depth-base\), 0px 1px 2px 0px #000000;$/m);
+  assert.equal(JSON.parse(outputs["fixture.styleguide.uibridge.json"]).tokens.shadows.glow, "0px 1px 4px 0px #000000, 0px 1px 2px 0px #000000");
+  const r = await cli(typed(["{space.depth.base}", layer], { base: leaf("shadow", [layer, layer], "authored(finding-glow)") }));
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {space.depth.base} names a multi-layer shadow; a shadow-array element is one layer"]);
 });

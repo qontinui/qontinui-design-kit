@@ -90,14 +90,14 @@ test("validate-guide: a page whose linked tokens.css 404s exits 3 naming it; wit
       "design-kit: unknown(stylesheet-missing): /tokens.css did not load; a guide evaluated without its stylesheets reads browser defaults, not the page",
     ]);
     const unknown = JSON.parse(fs.readFileSync(json, "utf8"));
-    assert.deepEqual([unknown.exitCode, unknown.stylesheets], [3, { requested: 1, failed: ["/tokens.css"], unreadable: [] }]);
+    assert.deepEqual([unknown.exitCode, unknown.stylesheets], [3, { requested: 1, failed: ["/tokens.css"], unreadable: [], pending: [] }]);
 
     fs.writeFileSync(path.join(dir, "tokens.css"), ":root { --dk-text: #111111; }\n");
     const present = [];
     assert.equal(await main(["validate-guide", guide, page, "--root", ROOT, "--json", json], (s) => present.push(s)), 0);
     assert.match(present.at(-1), /^design-kit validate-guide: \d+ elements, 1 rules, 0 failures \(@qontinui\/ui-bridge-wrapper@0\.12\.0\)$/);
     const report = JSON.parse(fs.readFileSync(json, "utf8"));
-    assert.deepEqual([report.exitCode, report.unknown, report.stylesheets], [0, null, { requested: 1, failed: [], unreadable: [] }]);
+    assert.deepEqual([report.exitCode, report.unknown, report.stylesheets], [0, null, { requested: 1, failed: [], unreadable: [], pending: [] }]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -129,7 +129,7 @@ test("check-states: a specimen whose linked token sheet 404s is unknown, never m
     const { code, lines, cov } = await runCheckStates(sp);
     assert.equal(code, 3);
     assert.equal(cov.summary.measured, 0);
-    assert.deepEqual(cov.stylesheets, { requested: 1, failed: ["/tokens.css"], unreadable: [] });
+    assert.deepEqual(cov.stylesheets, { requested: 1, failed: ["/tokens.css"], unreadable: [], pending: [] });
     assert.equal(nonBaseline(cov).length, 36);
     for (const c of nonBaseline(cov)) assert.equal(c.unknown, "unknown(stylesheet-missing): /tokens.css did not load", c.id);
     assert.match(lines.join("\n"), /unknown\(stylesheet-missing\): \/tokens\.css did not load/);
@@ -146,7 +146,7 @@ test("check-states: the kit's own --dk-kit-states does not make a page with no t
     const { code, cov } = await runCheckStates(sp);
     assert.equal(code, 3);
     assert.equal(cov.summary.measured, 0);
-    assert.deepEqual(cov.stylesheets, { requested: 0, failed: [], unreadable: [] });
+    assert.deepEqual(cov.stylesheets, { requested: 0, failed: [], unreadable: [], pending: [] });
     for (const c of nonBaseline(cov)) assert.equal(c.unknown, "unknown(no-token-values): the page declares no --dk-* custom property other than --dk-kit-states", c.id);
   } finally {
     sp.cleanup();
@@ -161,7 +161,7 @@ test("check-states: the same specimen with its linked token sheet present is mea
     const { code, cov } = await runCheckStates(sp);
     assert.equal(code, 0);
     assert.deepEqual(cov.summary, { cells: 56, measured: 36, baseline: 10, unknown: 10, findings: 0 });
-    assert.deepEqual(cov.stylesheets, { requested: 1, failed: [], unreadable: [] });
+    assert.deepEqual(cov.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
   } finally {
     sp.cleanup();
   }
@@ -202,11 +202,11 @@ test("validate-guide on a URL target the kit does not serve: a 404 stylesheet ex
     assert.deepEqual(missing, [
       "design-kit: unknown(stylesheet-missing): /tokens.css did not load; a guide evaluated without its stylesheets reads browser defaults, not the page",
     ]);
-    assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: ["/tokens.css"], unreadable: [] });
+    assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: ["/tokens.css"], unreadable: [], pending: [] });
     served = true;
     const present = [];
     assert.equal(await main(["validate-guide", guide, `${app.url}/route`, "--root", ROOT, "--json", json], (s) => present.push(s)), 0);
-    assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: [], unreadable: [] });
+    assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
   } finally {
     await app.close();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -227,7 +227,7 @@ test("validate-guide: a sheet from another origin whose rules cannot be read is 
     assert.deepEqual(lines, [
       `design-kit: unknown(stylesheet-unreadable): ${sheets.url}/tokens.css cannot be read (another origin, no CORS), so whether it carries the page's styles is unknown`,
     ]);
-    assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: [], unreadable: [`${sheets.url}/tokens.css`] });
+    assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: [], unreadable: [`${sheets.url}/tokens.css`], pending: [] });
   } finally {
     await app.close();
     await sheets.close();
@@ -237,8 +237,8 @@ test("validate-guide: a sheet from another origin whose rules cannot be read is 
 
 test("stylesheetLoad names a percent-encoded sheet once, by its decoded path; an answer with no lists is UNKNOWN (null)", () => {
   assert.deepEqual(
-    stylesheetLoad({ requested: 1, failed: ["http://127.0.0.1:5/my%20sheet.css"], unreadable: [] }, "http://127.0.0.1:5/p.html", ["/my sheet.css"]),
-    { requested: 1, failed: ["/my sheet.css"], unreadable: [] },
+    stylesheetLoad({ requested: 1, failed: ["http://127.0.0.1:5/my%20sheet.css"], unreadable: [], pending: [] }, "http://127.0.0.1:5/p.html", ["/my sheet.css"]),
+    { requested: 1, failed: ["/my sheet.css"], unreadable: [], pending: [] },
   );
   assert.equal(stylesheetLoad({ requested: 1, failed: [] }, "http://127.0.0.1:5/p.html", []), null);
 });
@@ -271,4 +271,88 @@ test("an em breakpoint is px at the 16px initial font size in the guide; a break
 test("an em type scale's heading rule still excludes the body step", async () => {
   const g = await guideOf({ type: { scale: { sm: leaf("dimension", em(0.875), "authored(f-s)"), md: leaf("dimension", em(1), "authored(f-s)"), lg: leaf("dimension", em(1.5), "authored(f-s)") } } });
   assert.deepEqual(g.rules.find((r) => r.id === "heading-size-on-scale").constraints[0].values, ["1.5em"]);
+});
+
+// ---------------------------------------------------------------- review round 2
+
+/** A page server with fixed routes (`path -> [status, type, body]`); `/slow.css` never answers until close. */
+async function routes(map) {
+  const open = new Set();
+  const app = http.createServer((req, res) => {
+    if (req.url === "/slow.css") return; // held open: the request never gets a response
+    const r = map[req.url] ?? [404, "text/html", "<!doctype html><h1>404</h1>"];
+    res.statusCode = r[0];
+    res.setHeader("content-type", r[1]);
+    res.end(r[2]);
+  });
+  app.on("connection", (sock) => {
+    open.add(sock);
+    sock.on("close", () => open.delete(sock));
+  });
+  await new Promise((r) => app.listen(0, "127.0.0.1", r));
+  return {
+    url: `http://127.0.0.1:${app.address().port}`,
+    close: () => new Promise((r) => {
+      for (const sock of open) sock.destroy();
+      app.close(r);
+    }),
+  };
+}
+
+const TOKENS = ":root { --dk-text: #111111; }\n";
+const BODY = '<body><button id="go" type="button" style="color: var(--dk-text)">Go</button></body></html>';
+const head = (links, script = "") => `<!doctype html><html style="color: var(--dk-text)"><head>${links}${script}</head>${BODY}`;
+
+async function validateUrl(name, map) {
+  const dir = tmpDir(name);
+  const app = await routes(map);
+  try {
+    const guide = path.join(dir, "guide.json");
+    const json = path.join(dir, "report.json");
+    fs.writeFileSync(guide, JSON.stringify(GUIDE));
+    const lines = [];
+    const code = await main(["validate-guide", guide, `${app.url}/route`, "--root", ROOT, "--json", json], (s) => lines.push(s));
+    return { code, lines, report: JSON.parse(fs.readFileSync(json, "utf8")) };
+  } finally {
+    await app.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("validate-guide: an @import-ed sheet that 404s on a URL target exits 3 naming it", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("import404", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/importer.css">')],
+    "/importer.css": [200, "text/css", '@import url("/missing-import.css");\n' + TOKENS],
+  });
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.lines, [
+    "design-kit: unknown(stylesheet-missing): /missing-import.css did not load; a guide evaluated without its stylesheets reads browser defaults, not the page",
+  ]);
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: ["/missing-import.css"], unreadable: [], pending: [] });
+});
+
+test("validate-guide: a disabled stylesheet link is not a load failure; the page is evaluated", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("disabled", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/dark.css" disabled>')],
+    "/tokens.css": [200, "text/css", TOKENS],
+    "/dark.css": [200, "text/css", ":root { --dk-text: #222222; }\n"],
+  });
+  assert.equal(r.code, 0, r.lines.join("\n"));
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
+});
+
+test("validate-guide: a stylesheet still loading when the page is read is unknown(stylesheet-pending), not 'did not load'", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const late = "<script>addEventListener('load', () => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/slow.css'; document.head.appendChild(l); });</script>";
+  const r = await validateUrl("pending", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css">', late)],
+    "/tokens.css": [200, "text/css", TOKENS],
+  });
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.lines, [
+    "design-kit: unknown(stylesheet-pending): /slow.css had no stylesheet when the page was read (still loading, or blocked before any response)",
+  ]);
+  assert.deepEqual(r.report.stylesheets, { requested: 2, failed: [], unreadable: [], pending: ["/slow.css"] });
 });

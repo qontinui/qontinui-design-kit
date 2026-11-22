@@ -78,15 +78,16 @@ test("validate-guide --storage-state is passed to the spawned door as the wrappe
     assert.deepEqual(lines, ["design-kit: unknown(instrument-cannot-read): @qontinui/ui-bridge-wrapper@9.9.9 gave no design snapshot ()"]);
     const report = JSON.parse(fs.readFileSync(path.join(p.dir, "out", "report.json"), "utf8"));
     assert.deepEqual(report, {
+      schema: 1,
       guide: path.join(p.dir, "guide.json"),
       target: "http://127.0.0.1:9/page",
       exitCode: 3,
       unknown: "unknown(instrument-cannot-read): @qontinui/ui-bridge-wrapper@9.9.9 gave no design snapshot ()",
       elements: null,
       rules: 1,
-      failures: [],
-      failuresByRule: {},
-      unmatchedRules: [],
+      failures: null,
+      failuresByRule: null,
+      unmatchedRules: null,
       stylesheets: null,
       instrument: "@qontinui/ui-bridge-wrapper@9.9.9",
     });
@@ -143,7 +144,8 @@ test("validate-guide --json writes a report whose failures match the stdout ERRO
     assert.equal(report.unknown, null);
     assert.equal(report.elements, 1);
     assert.equal(report.rules, 14);
-    assert.deepEqual(report.stylesheets, { requested: 0, failed: [], unreadable: [] });
+    assert.deepEqual(report.stylesheets, { requested: 0, failed: [], unreadable: [], pending: [] });
+    assert.equal(report.schema, 1);
     assert.equal(report.instrument, "@qontinui/ui-bridge-wrapper@0.12.0");
     assert.ok(report.unmatchedRules.includes("tabs-states-declared"));
     assert.equal(report.target, hand);
@@ -162,5 +164,20 @@ test("validate-guide's flags on another command are refused (exit 2)", async () 
     }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a validate-guide run that exits 2 leaves no earlier --json report behind", async () => {
+  const p = stubDoorProject();
+  try {
+    const out = path.join(p.dir, "out", "report.json");
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, JSON.stringify({ exitCode: 0, stale: true }));
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "not-a-file.html", "--root", p.dir, "--json", "out/report.json"], (s) => lines.push(s)), 2);
+    assert.deepEqual(lines, ["design-kit: not a URL and not a file: not-a-file.html"]);
+    assert.equal(fs.existsSync(out), false);
+  } finally {
+    p.cleanup();
   }
 });

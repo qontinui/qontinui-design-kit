@@ -5,46 +5,67 @@
  *
  * - the kit's loopback server records each `.css` request it answered 404
  *   (`missed()`; always empty for a URL target, which the kit does not serve);
- * - page-side, every `<link rel="stylesheet">` whose `sheet` is null, or whose
- *   request the page's resource timing reports with a `responseStatus` of 400
- *   or more. Chromium gives a 404'd stylesheet a non-null, empty `sheet`, so
- *   the status is what catches a 404 on a URL target. A cross-origin request
- *   with no `Timing-Allow-Origin` reports status 0, which says nothing, and the
- *   resource timing buffer (250 entries by default) can drop entries on a page
- *   that loads more resources than that;
- * - page-side, every `document.styleSheets` entry whose `cssRules` throws: a
- *   sheet from another origin with no CORS. Whether it loaded cannot be read,
- *   so it is listed as `unreadable`, a different UNKNOWN from `failed`.
+ * - page-side, for every enabled `<link rel="stylesheet">` (a `disabled` link
+ *   never has a sheet, by design, and is not counted) and every `@import` in a
+ *   readable sheet: the page's resource timing `responseStatus`. Chromium gives
+ *   a 404'd stylesheet a non-null, empty `sheet`, so the status is what catches
+ *   a 404 on a URL target. A link with no sheet and a 2xx status did not apply
+ *   (a refused MIME type) and is counted as not loaded too;
+ * - a link with no sheet and no recorded response is `pending`: still loading,
+ *   or blocked before any response. That is UNKNOWN, not a load failure;
+ * - every `document.styleSheets` entry whose `cssRules` throws is `unreadable`:
+ *   a sheet from another origin with no CORS, whose loading cannot be read.
+ *
+ * Limits: a cross-origin request with no `Timing-Allow-Origin` reports status 0,
+ * which says nothing; the resource timing buffer (250 entries by default) can
+ * drop entries on a page that loads more resources than that; and the `@import`s
+ * of an unreadable sheet cannot be walked.
  *
  * `validate-guide` and `check-states` read the same check.
  */
 
 export interface StylesheetLoad {
-  /** The `<link rel="stylesheet">` elements the page requested. */
+  /** The enabled `<link rel="stylesheet">` elements the page requested. */
   requested: number;
-  /** Sheets that did not load: a decoded path on the page's origin, else the full URL. */
+  /** Sheets (linked or `@import`-ed) that did not load: a decoded path on the page's origin, else the full URL. */
   failed: string[];
   /** Sheets whose rules cannot be read (another origin, no CORS), so whether they loaded is unknown. */
   unreadable: string[];
+  /** Linked sheets with no stylesheet and no recorded response when the page was read: still loading, or blocked. */
+  pending: string[];
 }
 
-/** Page-side expression: `{ requested, failed, unreadable }` with each sheet's absolute href. */
+/** Page-side expression: `{ requested, failed, unreadable, pending }` with each sheet's absolute href. */
 export const STYLESHEET_LOAD_EXPRESSION = `(() => {
   const status = new Map();
   for (const e of performance.getEntriesByType('resource')) {
     if (typeof e.responseStatus === 'number' && e.responseStatus > 0) status.set(e.name, e.responseStatus);
   }
   const failed = [];
-  const links = Array.from(document.querySelectorAll('link[rel~="stylesheet" i]'));
-  for (const l of links) {
-    const code = status.get(l.href);
-    if (!l.sheet || (code !== undefined && code >= 400)) failed.push(l.href || l.getAttribute('href') || '<link with no href>');
-  }
+  const pending = [];
   const unreadable = [];
-  for (const s of Array.from(document.styleSheets)) {
-    try { void s.cssRules; } catch (e) { unreadable.push(s.href || '<inline style>'); }
+  const links = Array.from(document.querySelectorAll('link[rel~="stylesheet" i]')).filter((l) => !l.disabled);
+  for (const l of links) {
+    const href = l.href || l.getAttribute('href') || '<link with no href>';
+    const code = status.get(l.href);
+    if (code !== undefined && code >= 400) failed.push(href);
+    else if (!l.sheet) (code === undefined ? pending : failed).push(href);
   }
-  return { requested: links.length, failed, unreadable };
+  const walk = (sheet, depth) => {
+    let rules;
+    try { rules = sheet.cssRules; } catch (e) { unreadable.push(sheet.href || '<inline style>'); return; }
+    if (depth > 8) return;
+    for (const r of Array.from(rules)) {
+      if (!(r instanceof CSSImportRule)) continue;
+      let href = r.href;
+      try { href = new URL(r.href, sheet.href || document.baseURI).href; } catch (e) { /* keep as written */ }
+      const code = status.get(href);
+      if (code !== undefined && code >= 400) failed.push(href);
+      else if (r.styleSheet) walk(r.styleSheet, depth + 1);
+    }
+  };
+  for (const s of Array.from(document.styleSheets)) walk(s, 0);
+  return { requested: links.length, failed, unreadable, pending };
 })()`;
 
 /**
@@ -52,8 +73,8 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
  * answer, which is UNKNOWN to the caller, never "every sheet loaded".
  */
 export function stylesheetLoad(pageValue: unknown, pageUrl: string, missed: readonly string[]): StylesheetLoad | null {
-  const v = pageValue as { requested?: unknown; failed?: unknown; unreadable?: unknown } | null | undefined;
-  if (!v || typeof v.requested !== "number" || !Array.isArray(v.failed) || !Array.isArray(v.unreadable)) return null;
+  const v = pageValue as { requested?: unknown; failed?: unknown; unreadable?: unknown; pending?: unknown } | null | undefined;
+  if (!v || typeof v.requested !== "number" || !Array.isArray(v.failed) || !Array.isArray(v.unreadable) || !Array.isArray(v.pending)) return null;
   let origin: string | null = null;
   try {
     origin = new URL(pageUrl).origin;
@@ -75,8 +96,8 @@ export function stylesheetLoad(pageValue: unknown, pageUrl: string, missed: read
     }
   };
   const failed = [...new Set([...missed, ...v.failed.map((f) => sheetPath(String(f)))])].sort();
-  const unreadable = [...new Set(v.unreadable.map((f) => sheetPath(String(f))))].filter((f) => !failed.includes(f)).sort();
-  return { requested: v.requested, failed, unreadable };
+  const rest = (xs: unknown[]): string[] => [...new Set(xs.map((f) => sheetPath(String(f))))].filter((f) => !failed.includes(f)).sort();
+  return { requested: v.requested, failed, unreadable: rest(v.unreadable), pending: rest(v.pending) };
 }
 
 /** The UNKNOWN a stylesheet that did not load reads as. */
@@ -85,3 +106,15 @@ export const stylesheetMissing = (failed: readonly string[]): string => `unknown
 /** The UNKNOWN a stylesheet whose rules cannot be read reads as. */
 export const stylesheetUnreadable = (unreadable: readonly string[]): string =>
   `unknown(stylesheet-unreadable): ${unreadable.join(", ")} cannot be read (another origin, no CORS), so whether it carries the page's styles is unknown`;
+
+/** The UNKNOWN a stylesheet that had not loaded when the page was read reads as. */
+export const stylesheetPending = (pending: readonly string[]): string =>
+  `unknown(stylesheet-pending): ${pending.join(", ")} had no stylesheet when the page was read (still loading, or blocked before any response)`;
+
+/** The first UNKNOWN a stylesheet load reads as, in order of certainty; null when every sheet loaded. */
+export function stylesheetUnknown(load: StylesheetLoad): string | null {
+  if (load.failed.length > 0) return stylesheetMissing(load.failed);
+  if (load.pending.length > 0) return stylesheetPending(load.pending);
+  if (load.unreadable.length > 0) return stylesheetUnreadable(load.unreadable);
+  return null;
+}

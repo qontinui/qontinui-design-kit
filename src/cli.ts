@@ -273,6 +273,9 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
     out("design-kit: validate-guide needs <guide> <url|file>\n" + USAGE);
     return 2;
   }
+  // A run that refuses (exit 2) must not leave an earlier run's report standing as if it were this one's.
+  const jsonFile = args.json !== null ? path.resolve(args.root, args.json) : null;
+  if (jsonFile !== null) fs.rmSync(jsonFile, { force: true });
   let storageState: string | undefined;
   if (args.storageState !== null) {
     storageState = path.resolve(args.root, args.storageState);
@@ -288,7 +291,6 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
       return 2;
     }
   }
-  const jsonFile = args.json !== null ? path.resolve(args.root, args.json) : null;
   const { validateGuide, guideJson, GuideUnknown } = await import("./validate/guide.js");
   const writeJson = (json: ReturnType<typeof guideJson>): void => {
     if (jsonFile === null) return;
