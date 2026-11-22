@@ -610,3 +610,24 @@ test("validate-guide: the kit's file server serves an upper-case .CSS file as CS
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------- review round 21
+
+test("validate-guide: a cross-origin sheet fetched with CORS and refused as octet-stream (no Timing-Allow-Origin, so no body size) did not load (exit 3)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const other = http.createServer((req, res) => {
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("content-type", "application/octet-stream");
+    res.end(TOKENS);
+  });
+  await new Promise((r) => other.listen(0, "127.0.0.1", r));
+  const origin = `http://127.0.0.1:${other.address().port}`;
+  try {
+    const r = await validateUrl("cors-octet", { "/route": [200, "text/html", head(`<link rel="stylesheet" crossorigin="anonymous" href="${origin}/tokens.css">`)] });
+    assert.equal(r.code, 3);
+    assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [`${origin}/tokens.css`], unreadable: [], pending: [] });
+  } finally {
+    other.closeAllConnections();
+    await new Promise((r) => other.close(r));
+  }
+});

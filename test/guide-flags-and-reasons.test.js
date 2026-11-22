@@ -706,3 +706,32 @@ test("validate-guide: a page the door ended on at another origin (only the port 
     p.cleanup();
   }
 });
+
+// ---------------------------------------------------------------- review round 21
+
+const NO_SHEET_ANSWER = "unknown(instrument-cannot-read): @qontinui/ui-bridge-wrapper@9.9.9 did not answer the stylesheet-load check";
+
+test("validate-guide and check-states: a stylesheet check the door did not answer is UNKNOWN (exit 3), never every sheet loaded", async () => {
+  const p = stubDoorProject();
+  try {
+    p.answer([evaluated(null), { action: "discover", result: {} }, SNAPSHOT, evaluated(["rgb(17, 17, 17)"]), sheets([]), evaluated("http://127.0.0.1:9/page")]);
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir], (s) => lines.push(s)), 3);
+    assert.deepEqual(lines, [`design-kit: ${NO_SHEET_ANSWER}`]);
+
+    const page = path.join(p.dir, "specimen.html");
+    fs.writeFileSync(page, '<!doctype html><script type="application/json" id="dk-specimen-cells">[{"component":"Button","variant":"primary","state":"hover","id":"c1","target":"b1"}]</script>');
+    p.answer([
+      sheets([]),
+      { action: "discover", result: {} },
+      { action: "getElementStateStyles", result: { stateStyles: [{ state: "hover", styles: {}, diffFromDefault: [{ property: "color", defaultValue: "rgb(0, 0, 0)", stateValue: "rgb(1, 2, 3)" }] }] } },
+      evaluated({ count: 1, values: ["rgb(1, 2, 3)"] }),
+      evaluated(null),
+    ]);
+    assert.equal(await main(["check-states", page, "--root", p.dir, "--file", "coverage.json"], () => undefined), 3);
+    const cov = JSON.parse(fs.readFileSync(path.join(p.dir, "coverage.json"), "utf8"));
+    assert.deepEqual(cov.cells.map((c) => [c.id, c.status, c.unknown]), [["c1", "unknown", NO_SHEET_ANSWER]]);
+  } finally {
+    p.cleanup();
+  }
+});

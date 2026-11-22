@@ -139,10 +139,10 @@ interface Resolved {
  * that field holds (`color` a colour, an offset, blur or spread a dimension,
  * an array element a one-layer shadow; `inset` is never an alias). An alias
  * inside any other composite value (a font-family list, a cubic-bezier) is
- * refused. An alias
- * that names no leaf, an undeclared leaf, or a leaf that emits no variable is
- * refused; so is an alias embedded in a longer string, which would otherwise
- * reach the CSS as literal `{a.b}` text.
+ * refused. An alias that names no leaf or an undeclared leaf is refused, and so
+ * is a composite field alias naming a leaf that emits no variable (a whole-value
+ * alias takes that leaf's value); so is an alias embedded in a longer string,
+ * which would otherwise reach the CSS as literal `{a.b}` text.
  */
 function entriesFor(leaves: Leaf[]): Entry[] {
   const byLeaf = new Map(leaves.map((l) => [l.path, l]));

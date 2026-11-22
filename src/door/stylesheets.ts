@@ -12,8 +12,10 @@
  *   or more, or a `contentType` that is not `text/css` (a dev server answering
  *   a missing `.css` path with its HTML shell, which Chromium refuses to apply
  *   in a standards-mode page), is a sheet that did not load. So is a response
- *   with a body whose type resource timing reports as empty and whose sheet has
- *   no rules: Chromium refuses `application/octet-stream` and reports it so. A quirks-mode page
+ *   whose status is visible, whose type resource timing reports as empty and
+ *   whose sheet has no rules: Chromium refuses `application/octet-stream` and
+ *   reports it so (an empty sheet sent with no Content-Type reads the same way,
+ *   toward UNKNOWN). A quirks-mode page
  *   (no doctype) applies a same-origin sheet served as `text/plain`, which this
  *   rule still counts as not loaded: the error is toward UNKNOWN, never a pass. Chromium gives both a non-null, empty `sheet`,
  *   so the timing entry is what catches them on a URL target. A link with no
@@ -58,16 +60,16 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
     seen.set(e.name, {
       code: typeof e.responseStatus === 'number' && e.responseStatus > 0 ? e.responseStatus : 0,
       type: typeof e.contentType === 'string' ? e.contentType.split(';')[0].trim().toLowerCase() : '',
-      size: typeof e.encodedBodySize === 'number' ? e.encodedBodySize : 0,
     });
   }
   // A response that is an error, or that is not CSS, is a sheet that did not load.
   const badResponse = (i) => i !== undefined && (i.code >= 400 || (i.type !== '' && i.type !== 'text/css'));
-  // Chromium reports the content type of a sheet it refuses as octet-stream as "", so a response with a body, no
-  // reported type and a sheet holding no rules was refused, not applied. A sheet sent with no Content-Type at all is
-  // applied and has rules; a comment-only one read this way is UNKNOWN, never a pass.
+  // Chromium reports the content type of a sheet it refuses as octet-stream as "", so a response with a visible
+  // status, no reported type and a sheet holding no rules was refused, not applied. The body size is not asked for:
+  // a CORS response without Timing-Allow-Origin reports 0. A sheet sent with no Content-Type at all is applied and
+  // has rules; an empty or comment-only one read this way is UNKNOWN, never a pass.
   const refusedSheet = (sheet, i) => {
-    if (!sheet || i === undefined || i.code === 0 || i.type !== '' || i.size === 0) return false;
+    if (!sheet || i === undefined || i.code === 0 || i.type !== '') return false;
     try { return sheet.cssRules.length === 0; } catch (e) { return false; }
   };
   const failed = [];

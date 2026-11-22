@@ -180,9 +180,10 @@ function reportArgs(argv: string[]): { file: string; inputs: string[] } | null {
 }
 
 /** This process's stdout when the report could be written into it (a file, a pipe or a socket); else null. */
-function ownStdout(): fs.Stats | null {
+function ownStdout(): fs.BigIntStats | null {
   try {
-    const st = fs.fstatSync(1);
+    // bigint, as in samePath: a file id above 2^53 loses its low bits as a Number.
+    const st = fs.fstatSync(1, { bigint: true });
     return st.isFile() || st.isFIFO() || st.isSocket() ? st : null;
   } catch {
     return null;
@@ -208,9 +209,9 @@ function clearJsonReport(argv: string[], out: Out): number | null {
     return 2;
   };
   if (inputs.some((f) => samePath(f, file))) return refuseJson("is one of validate-guide's inputs; refusing to overwrite it");
-  let st: fs.Stats;
+  let st: fs.BigIntStats;
   try {
-    st = fs.statSync(file);
+    st = fs.statSync(file, { bigint: true });
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     return refuseJson(`cannot be replaced: ${(e as Error).message}`);
@@ -222,7 +223,7 @@ function clearJsonReport(argv: string[], out: Out): number | null {
   }
   if (st.isDirectory()) return refuseJson("cannot be replaced: it is a directory");
   // A pipe or a device holds no verdict and is never read, so a FIFO cannot hold the run; nor does an empty file.
-  if (!st.isFile() || st.size === 0) return null;
+  if (!st.isFile() || st.size === BigInt(0)) return null;
   let text: string;
   try {
     text = fs.readFileSync(file, "utf8");
