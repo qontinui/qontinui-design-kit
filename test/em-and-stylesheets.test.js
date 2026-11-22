@@ -669,7 +669,7 @@ test("validate-guide: a linked sheet that 404'd on a URL target whose page clear
   assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: ["/tokens.css"] });
 });
 
-test("validate-guide: a file target whose name the browser escapes (a|b.html) is the same page, not a redirect (exit 0)", async (t) => {
+test("validate-guide: a file target whose name the browser escapes (a pipe character) is the same page, not a redirect (exit 0)", async (t) => {
   if (process.platform === "win32") {
     t.skip("a | cannot be in a Windows file name");
     return;
