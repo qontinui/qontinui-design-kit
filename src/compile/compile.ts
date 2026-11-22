@@ -214,9 +214,8 @@ function entriesFor(leaves: Leaf[]): Entry[] {
   for (const l of leaves) {
     if (l.source.kind === "undeclared" || !EMITTED_GROUPS.includes(l.group)) continue;
     const r = resolveLeaf(l, []);
-    // An alias takes the type of its target when it states none.
-    let type = l.type;
-    if (type === null && aliasTarget(l.value) !== null) type = byLeaf.get(aliasTarget(l.value) as string)?.type ?? null;
+    // An alias takes the type of its target when it states none, through any number of alias hops.
+    const type = typeOf(l);
     out.push({
       path: l.path,
       group: l.group,

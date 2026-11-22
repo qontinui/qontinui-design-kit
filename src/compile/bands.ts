@@ -40,6 +40,7 @@ export function outOfBand(entries: Entry[], source: DesignSource): OutOfBand[] {
   }
 
   // Every layer of every shadow, an array shadow's layers included; a string layer states no readable offset.
+  // `value` is the number of layers read, so a layer an alias names is counted once per shadow that uses it.
   const layers = entries
     .filter((e) => e.path.startsWith("space.depth."))
     .flatMap((e) => (Array.isArray(e.value) ? e.value : [e.value]))

@@ -225,7 +225,7 @@ test("validate-guide: a sheet from another origin whose rules cannot be read is 
     const lines = [];
     assert.equal(await main(["validate-guide", guide, `${app.url}/route`, "--root", ROOT, "--json", json], (s) => lines.push(s)), 3);
     assert.deepEqual(lines, [
-      `design-kit: unknown(stylesheet-unreadable): ${sheets.url}/tokens.css cannot be read (another origin, no CORS), so whether it carries the page's styles is unknown`,
+      `design-kit: unknown(stylesheet-unreadable): ${sheets.url}/tokens.css was fetched without CORS (the link has no crossorigin attribute, or its server sends no Access-Control-Allow-Origin), so whether it carries the page's styles cannot be read`,
     ]);
     assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: [], unreadable: [`${sheets.url}/tokens.css`], pending: [] });
   } finally {
@@ -268,9 +268,10 @@ test("an em breakpoint is px at the 16px initial font size in the guide; a break
   }
 });
 
-test("an em type scale's heading rule still excludes the body step", async () => {
+test("an em type scale is listed at the 16px root, as in 0.1.x, and its heading rule excludes the body step", async () => {
   const g = await guideOf({ type: { scale: { sm: leaf("dimension", em(0.875), "authored(f-s)"), md: leaf("dimension", em(1), "authored(f-s)"), lg: leaf("dimension", em(1.5), "authored(f-s)") } } });
-  assert.deepEqual(g.rules.find((r) => r.id === "heading-size-on-scale").constraints[0].values, ["1.5em"]);
+  assert.deepEqual(g.tokens.typography.fontSizes, { lg: "24px", md: "16px", sm: "14px" });
+  assert.deepEqual(g.rules.find((r) => r.id === "heading-size-on-scale").constraints[0].values, ["24px"]);
 });
 
 // ---------------------------------------------------------------- review round 2
@@ -352,4 +353,45 @@ test("validate-guide: a stylesheet still loading when the page is read is unknow
     "design-kit: unknown(stylesheet-pending): /slow.css had no stylesheet when the page was read (still loading, or blocked before any response)",
   ]);
   assert.deepEqual(r.report.stylesheets, { requested: 2, failed: [], unreadable: [], pending: ["/slow.css"] });
+});
+
+// ---------------------------------------------------------------- review round 3
+
+test("validate-guide: a stylesheet answered 200 text/html (a dev-server fallback) did not load, as a link and as an @import", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const html = [200, "text/html", "<!doctype html><title>app shell</title><p>not css</p>"];
+  const linked = await validateUrl("mime-link", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/fallback.css">')],
+    "/tokens.css": [200, "text/css", TOKENS],
+    "/fallback.css": html,
+  });
+  assert.equal(linked.code, 3);
+  assert.deepEqual(linked.report.stylesheets, { requested: 2, failed: ["/fallback.css"], unreadable: [], pending: [] });
+  const imported = await validateUrl("mime-import", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/importer.css">')],
+    "/importer.css": [200, "text/css", '@import url("/fallback2.css");\n' + TOKENS],
+    "/fallback2.css": html,
+  });
+  assert.equal(imported.code, 3);
+  assert.deepEqual(imported.report.stylesheets, { requested: 1, failed: ["/fallback2.css"], unreadable: [], pending: [] });
+});
+
+test("validate-guide on a file target whose resource timing was cleared: the kit server's record of the 404 still exits 3", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const dir = tmpDir("cleared");
+  try {
+    const guide = path.join(dir, "guide.json");
+    const page = path.join(dir, "page.html");
+    const json = path.join(dir, "report.json");
+    fs.writeFileSync(guide, JSON.stringify(GUIDE));
+    fs.writeFileSync(page, head('<link rel="stylesheet" href="tokens.css">', '<script>addEventListener("load", () => performance.clearResourceTimings());</script>'));
+    const lines = [];
+    assert.equal(await main(["validate-guide", guide, page, "--root", ROOT, "--json", json], (s) => lines.push(s)), 3);
+    assert.deepEqual(lines, [
+      "design-kit: unknown(stylesheet-missing): /tokens.css did not load; a guide evaluated without its stylesheets reads browser defaults, not the page",
+    ]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: ["/tokens.css"], unreadable: [], pending: [] });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

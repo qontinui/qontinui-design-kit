@@ -163,3 +163,15 @@ test("a shadow-array element alias names one layer; one naming a multi-layer sha
   assert.equal(r.code, 2);
   assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {space.depth.base} names a multi-layer shadow; a shadow-array element is one layer"]);
 });
+
+// ---------------------------------------------------------------- review round 3
+
+test("a two-hop untyped whole-value alias to a shadow compiles as that shadow", async () => {
+  const { outputs } = await compile(
+    glowSource({ offsetX: px(0), offsetY: px(0), blur: px(12), color: "{color.glow.primary}" }, {
+      a: leaf(undefined, "{space.depth.b}", "authored(finding-glow)"),
+      b: leaf(undefined, "{space.depth.glow}", "authored(finding-glow)"),
+    }),
+  );
+  assert.match(outputs["tokens.css"], /^ {2}--dk-space-depth-a: 0px 0px 12px 0px var\(--dk-color-glow-primary\);$/m);
+});

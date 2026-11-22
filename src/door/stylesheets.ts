@@ -7,19 +7,24 @@
  *   (`missed()`; always empty for a URL target, which the kit does not serve);
  * - page-side, for every enabled `<link rel="stylesheet">` (a `disabled` link
  *   never has a sheet, by design, and is not counted) and every `@import` in a
- *   readable sheet: the page's resource timing `responseStatus`. Chromium gives
- *   a 404'd stylesheet a non-null, empty `sheet`, so the status is what catches
- *   a 404 on a URL target. A link with no sheet and a 2xx status did not apply
- *   (a refused MIME type) and is counted as not loaded too;
+ *   readable sheet: the page's resource timing entry. A `responseStatus` of 400
+ *   or more, or a `contentType` that is not `text/css` (a dev server answering
+ *   a missing `.css` path with its HTML shell, which Chromium refuses to apply),
+ *   is a sheet that did not load. Chromium gives both a non-null, empty `sheet`,
+ *   so the timing entry is what catches them on a URL target. A link with no
+ *   sheet despite a response is counted as not loaded too;
  * - a link with no sheet and no recorded response is `pending`: still loading,
  *   or blocked before any response. That is UNKNOWN, not a load failure;
  * - every `document.styleSheets` entry whose `cssRules` throws is `unreadable`:
- *   a sheet from another origin with no CORS, whose loading cannot be read.
+ *   a sheet fetched without CORS from another origin (the link has no
+ *   `crossorigin` attribute, or its server sends no
+ *   `Access-Control-Allow-Origin`), whose loading cannot be read.
  *
- * Limits: a cross-origin request with no `Timing-Allow-Origin` reports status 0,
- * which says nothing; the resource timing buffer (250 entries by default) can
- * drop entries on a page that loads more resources than that; and the `@import`s
- * of an unreadable sheet cannot be walked.
+ * Limits: a cross-origin stylesheet fetched without CORS reports status 0 and no
+ * content type, which say nothing; the resource timing buffer (250 entries by
+ * default) can drop entries on a page that loads more resources than that,
+ * leaving the kit server's own record as the only signal for a file target; and
+ * the `@import`s of an unreadable sheet cannot be walked.
  *
  * `validate-guide` and `check-states` read the same check.
  */
@@ -37,19 +42,24 @@ export interface StylesheetLoad {
 
 /** Page-side expression: `{ requested, failed, unreadable, pending }` with each sheet's absolute href. */
 export const STYLESHEET_LOAD_EXPRESSION = `(() => {
-  const status = new Map();
+  const seen = new Map();
   for (const e of performance.getEntriesByType('resource')) {
-    if (typeof e.responseStatus === 'number' && e.responseStatus > 0) status.set(e.name, e.responseStatus);
+    seen.set(e.name, {
+      code: typeof e.responseStatus === 'number' && e.responseStatus > 0 ? e.responseStatus : 0,
+      type: typeof e.contentType === 'string' ? e.contentType.split(';')[0].trim().toLowerCase() : '',
+    });
   }
+  // A response that is an error, or that is not CSS, is a sheet that did not load.
+  const refused = (i) => i !== undefined && (i.code >= 400 || (i.type !== '' && i.type !== 'text/css'));
   const failed = [];
   const pending = [];
   const unreadable = [];
   const links = Array.from(document.querySelectorAll('link[rel~="stylesheet" i]')).filter((l) => !l.disabled);
   for (const l of links) {
     const href = l.href || l.getAttribute('href') || '<link with no href>';
-    const code = status.get(l.href);
-    if (code !== undefined && code >= 400) failed.push(href);
-    else if (!l.sheet) (code === undefined ? pending : failed).push(href);
+    const i = seen.get(l.href);
+    if (refused(i)) failed.push(href);
+    else if (!l.sheet) (i === undefined || i.code === 0 ? pending : failed).push(href);
   }
   const walk = (sheet, depth) => {
     let rules;
@@ -59,8 +69,7 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
       if (!(r instanceof CSSImportRule)) continue;
       let href = r.href;
       try { href = new URL(r.href, sheet.href || document.baseURI).href; } catch (e) { /* keep as written */ }
-      const code = status.get(href);
-      if (code !== undefined && code >= 400) failed.push(href);
+      if (refused(seen.get(href))) failed.push(href);
       else if (r.styleSheet) walk(r.styleSheet, depth + 1);
     }
   };
@@ -105,7 +114,7 @@ export const stylesheetMissing = (failed: readonly string[]): string => `unknown
 
 /** The UNKNOWN a stylesheet whose rules cannot be read reads as. */
 export const stylesheetUnreadable = (unreadable: readonly string[]): string =>
-  `unknown(stylesheet-unreadable): ${unreadable.join(", ")} cannot be read (another origin, no CORS), so whether it carries the page's styles is unknown`;
+  `unknown(stylesheet-unreadable): ${unreadable.join(", ")} was fetched without CORS (the link has no crossorigin attribute, or its server sends no Access-Control-Allow-Origin), so whether it carries the page's styles cannot be read`;
 
 /** The UNKNOWN a stylesheet that had not loaded when the page was read reads as. */
 export const stylesheetPending = (pending: readonly string[]): string =>

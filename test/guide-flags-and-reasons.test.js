@@ -181,3 +181,18 @@ test("a validate-guide run that exits 2 leaves no earlier --json report behind",
     p.cleanup();
   }
 });
+
+test("validate-guide runs refused for a missing target or an extra argument leave no earlier --json report either", async () => {
+  const p = stubDoorProject();
+  try {
+    const out = path.join(p.dir, "out", "report.json");
+    for (const argv of [["validate-guide", "guide.json"], ["validate-guide", "guide.json", "t.html", "extra"]]) {
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      fs.writeFileSync(out, JSON.stringify({ exitCode: 0, stale: true }));
+      assert.equal(await main([...argv, "--root", p.dir, "--json", "out/report.json"], () => undefined), 2, argv.join(" "));
+      assert.equal(fs.existsSync(out), false, argv.join(" "));
+    }
+  } finally {
+    p.cleanup();
+  }
+});

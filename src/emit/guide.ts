@@ -56,10 +56,11 @@ export const guideFileName = (name: string): string => `${kebab(name)}.styleguid
  * colour is `rgb(r, g, b)` (or `rgba(...)`), and a `rem` length is `px` at the
  * 16px root. An `em` length is returned as written: its px value depends on
  * the font size of the element it is set on, which no root conversion knows
- * (a `0.025em` tracking is `0.35px` on 14px text, not `0.4px`). Anything else
- * (a platform keyword, `color-mix`) stays as the source spells it;
- * `design-kit validate-guide` canonicalises those through the browser before
- * it compares.
+ * (a `0.025em` tracking is `0.35px` on 14px text, not `0.4px`). The guide
+ * writes tracking this way; font sizes, spacing and radii go through
+ * `atRoot`, which keeps the 0.1.x conversion. Anything else (a platform
+ * keyword, `color-mix`) stays as the source spells it; `design-kit
+ * validate-guide` canonicalises those through the browser before it compares.
  *
  * No guide rule reads `letterSpacing` today. A future tracking rule must
  * compare the element's computed `letterSpacing` divided by its computed
@@ -79,6 +80,17 @@ export function canonical(css: string): string {
   const len = /^(-?\d*\.?\d+)rem$/.exec(css.trim());
   if (len) return `${Math.round(parseFloat(len[1] as string) * 16 * 1000) / 1000}px`;
   return css.trim();
+}
+
+/**
+ * `canonical`, with an `em` length also converted to px at the 16px root, as
+ * 0.1.x converted every one. The guide lists font sizes, spacing and radii
+ * this way: handing `1em` to `validate-guide`'s browser probe would resolve it
+ * against the page body's font size instead, and change those verdicts.
+ */
+export function atRoot(css: string): string {
+  const em = /^(-?\d*\.?\d+)em$/.exec(css.trim());
+  return em ? `${Math.round(parseFloat(em[1] as string) * 16 * 1000) / 1000}px` : canonical(css);
 }
 
 function under(entries: Entry[], prefix: string): Entry[] {
@@ -129,13 +141,13 @@ function tokensOf(entries: Entry[]): DesignTokens {
     colors: record(entries, "color."),
     typography: {
       fontFamilies: record(entries, "type.family."),
-      fontSizes: record(entries, "type.scale."),
+      fontSizes: record(entries, "type.scale.", (e) => atRoot(e.resolvedCss)),
       fontWeights: record(entries, "type.weight."),
       lineHeights: record(entries, "type.leading."),
       letterSpacings: record(entries, "type.tracking."),
     },
-    spacing: record(entries, "space.scale."),
-    borderRadius: record(entries, "space.radius."),
+    spacing: record(entries, "space.scale.", (e) => atRoot(e.resolvedCss)),
+    borderRadius: record(entries, "space.radius.", (e) => atRoot(e.resolvedCss)),
     shadows: record(entries, "space.depth."),
     breakpoints,
   };

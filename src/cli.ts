@@ -21,7 +21,8 @@ const USAGE = `design-kit <command> [options]
   check-states <url|file>    measure each specimen cell's state through the published exec door; write state-coverage.json
   validate-guide <guide> <url|file> [--storage-state <file>] [--json <file>]
                              run the guide's rules (ui-bridge validateElement) over the page's elements;
-                             a page whose stylesheet did not load is UNKNOWN (exit 3)
+                             a page whose stylesheet did not load is UNKNOWN (exit 3). A file target
+                             resolves against the current directory, the guide against --root
   index [--check]            write (or check) the component index between the markers in CLAUDE.md
 
 options
@@ -99,6 +100,9 @@ export async function main(argv: string[], out: Out = (s) => process.stdout.writ
     return args.command === null ? 0 : 2;
   }
   const arity: Record<string, number> = { compile: 0, status: 0, diff: 0, specimen: 0, index: 0, "lint-classes": 1, "check-states": 1, "validate-guide": 2 };
+  // A refused run (exit 2) must not leave an earlier run's report standing as if it were this one's,
+  // so the report path is cleared before any refusal, the usage checks below included.
+  if (args.command === "validate-guide" && args.json !== null) fs.rmSync(path.resolve(args.root, args.json), { force: true });
   if ((args.storageState !== null || args.json !== null) && args.command !== "validate-guide") {
     out(`design-kit: --storage-state and --json apply to validate-guide only\n` + USAGE);
     return 2;
@@ -273,9 +277,7 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
     out("design-kit: validate-guide needs <guide> <url|file>\n" + USAGE);
     return 2;
   }
-  // A run that refuses (exit 2) must not leave an earlier run's report standing as if it were this one's.
   const jsonFile = args.json !== null ? path.resolve(args.root, args.json) : null;
-  if (jsonFile !== null) fs.rmSync(jsonFile, { force: true });
   let storageState: string | undefined;
   if (args.storageState !== null) {
     storageState = path.resolve(args.root, args.storageState);
