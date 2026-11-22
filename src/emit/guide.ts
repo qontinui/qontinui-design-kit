@@ -115,6 +115,8 @@ function record(entries: Entry[], prefix: string, map: (e: Entry) => string = (e
  * lengths are compared.
  */
 const lengthPx = (s: string): number | null => {
+  // A bare 0 is a length in CSS (a media query takes `0`).
+  if (/^-?0*\.?0+$/.test(s.trim())) return 0;
   const m = /^(-?\d*\.?\d+)(px|rem|em)$/.exec(s.trim());
   if (!m) return null;
   const v = parseFloat(m[1] as string);

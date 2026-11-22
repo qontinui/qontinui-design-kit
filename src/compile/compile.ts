@@ -198,7 +198,9 @@ function entriesFor(leaves: Leaf[]): Entry[] {
   // `slot` is the shadow field a value fills (LAYER for an array element), or null.
   const resolveParts = (v: unknown, owner: Leaf, trail: string[], top: boolean, slot: string | typeof LAYER | null): Resolved => {
     if (Array.isArray(v)) {
-      const parts = v.map((x) => resolveParts(x, owner, trail, false, LAYER));
+      // Only the shadow's own value is a list of layers; an array under a field is that field's list (`color[]`).
+      const elementSlot = top ? LAYER : typeof slot === "string" ? `${slot}[]` : slot;
+      const parts = v.map((x) => resolveParts(x, owner, trail, false, elementSlot));
       return { value: parts.map((p) => p.value), css: parts.map((p) => p.css) };
     }
     if (isPlainObject(v)) {

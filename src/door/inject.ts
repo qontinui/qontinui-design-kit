@@ -136,13 +136,13 @@ export function serveDir(dir: string): Promise<ServedPage> {
   });
 }
 
+/** A page target that is a URL (served by someone else), not a local file the kit serves. */
+export const isUrlTarget = (target: string): boolean => /^https?:\/\//.test(target);
+
 /**
  * A page argument is a URL or a local file. A file is served from its own
  * directory so the check never needs a dev server.
  */
-/** A page target that is a URL (served by someone else), not a local file the kit serves. */
-export const isUrlTarget = (target: string): boolean => /^https?:\/\//.test(target);
-
 export async function openPage(target: string): Promise<ServedPage> {
   if (isUrlTarget(target)) return { url: target, close: async () => undefined, missed: () => [] };
   const file = path.resolve(target);

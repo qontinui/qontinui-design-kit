@@ -247,8 +247,11 @@ async function guideOf(source) {
 }
 
 test("an em breakpoint is px at the 16px initial font size in the guide; a breakpoint in no convertible unit is refused, not dropped", async () => {
-  const g = await guideOf({ layout: { breakpoint: { md: leaf("dimension", em(48), "authored(f-bp)"), lg: leaf("dimension", { value: 1024, unit: "px" }, "authored(f-bp)") } } });
-  assert.deepEqual(g.tokens.breakpoints, { lg: 1024, md: 768 });
+  const g = await guideOf({
+    layout: { breakpoint: { xs: leaf("dimension", "0", "authored(f-bp)"), md: leaf("dimension", em(48), "authored(f-bp)"), lg: leaf("dimension", { value: 1024, unit: "px" }, "authored(f-bp)") } },
+  });
+  // A bare 0 is a valid media-query length.
+  assert.deepEqual(g.tokens.breakpoints, { lg: 1024, md: 768, xs: 0 });
   const p = mkProject({ $extensions: { qontinui: { name: "fixture" } }, layout: { breakpoint: { wide: leaf("dimension", "50vw", "authored(f-bp)") } } });
   try {
     await assert.rejects(compileSource({ sourcePath: p.sourcePath, rootDir: p.dir }), {

@@ -30,3 +30,9 @@ test("a sheet pending when the page was first read stays pending though it loade
   assert.equal(mergeStylesheetLoads(null, after), null);
   assert.equal(mergeStylesheetLoads(before, null), null);
 });
+
+test("a sheet pending at the first read and failed at the last is listed once, under failed", () => {
+  const before = { requested: 1, failed: [], unreadable: ["/a.css"], pending: ["/a.css"] };
+  const after = { requested: 1, failed: ["/a.css"], unreadable: [], pending: [] };
+  assert.deepEqual(mergeStylesheetLoads(before, after), { requested: 1, failed: ["/a.css"], unreadable: [], pending: [] });
+});

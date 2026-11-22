@@ -222,7 +222,7 @@ test("validate-guide --json: an argument refused at parse time leaves no earlier
 
     const lines = [];
     assert.equal(await main(["validate-guide", "guide.json", "t.html", "--root", p.dir, "--json", "out"], (s) => lines.push(s)), 2);
-    assert.match(lines[0], /^design-kit: --json .*\/out cannot be replaced: /);
+    assert.match(lines[0], /^design-kit: --json .*[\\/]out cannot be replaced: /);
     assert.equal(fs.statSync(path.join(p.dir, "out")).isDirectory(), true);
 
     const guide = [];

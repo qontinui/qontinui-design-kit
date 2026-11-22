@@ -217,3 +217,11 @@ test("a shadow-array element alias naming a one-element shadow array is that one
   assert.equal(r.code, 2);
   assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {space.depth.two} names a shadow array of 2 layers; a shadow-array element is one layer"]);
 });
+
+// ---------------------------------------------------------------- review round 12
+
+test("an alias inside an array under a shadow field is refused naming that field, not a shadow-array element", async () => {
+  const r = await cli(glowSource({ offsetX: px(0), offsetY: px(0), blur: px(2), color: ["{color.glow.primary}"] }));
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {color.glow.primary} fills color[], which is not a shadow field"]);
+});
