@@ -26,8 +26,9 @@
  *   does not follow) is not counted;
  * - every `document.styleSheets` entry whose `cssRules` throws is `unreadable`:
  *   a sheet fetched without CORS from another origin (the link has no
- *   `crossorigin` attribute, or its server sends no
- *   `Access-Control-Allow-Origin`), whose loading cannot be read.
+ *   `crossorigin` attribute, its server sends no `Access-Control-Allow-Origin`,
+ *   or it is a cross-origin `@import`, which the browser always fetches without
+ *   CORS), whose loading cannot be read.
  *
  * Limits: a cross-origin stylesheet fetched without CORS reports status 0 and no
  * content type, which say nothing; the resource timing buffer (250 entries by
@@ -164,7 +165,7 @@ export const stylesheetMissing = (failed: readonly string[]): string => `unknown
 
 /** The UNKNOWN a stylesheet whose rules cannot be read reads as. */
 export const stylesheetUnreadable = (unreadable: readonly string[]): string =>
-  `unknown(stylesheet-unreadable): ${unreadable.join(", ")} was fetched without CORS (the link has no crossorigin attribute, or its server sends no Access-Control-Allow-Origin), so whether it carries the page's styles cannot be read`;
+  `unknown(stylesheet-unreadable): ${unreadable.join(", ")} was fetched without CORS (a link with no crossorigin attribute, a server that sends no Access-Control-Allow-Origin, or a cross-origin @import, which the browser fetches without CORS whatever its server sends), so whether it carries the page's styles cannot be read`;
 
 /** The UNKNOWN a stylesheet that had not loaded when the page was read reads as. */
 export const stylesheetPending = (pending: readonly string[]): string =>

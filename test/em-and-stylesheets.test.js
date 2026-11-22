@@ -228,7 +228,7 @@ test("validate-guide: a sheet from another origin whose rules cannot be read is 
     const lines = [];
     assert.equal(await main(["validate-guide", guide, `${app.url}/route`, "--root", ROOT, "--json", json], (s) => lines.push(s)), 3);
     assert.deepEqual(lines, [
-      `design-kit: unknown(stylesheet-unreadable): ${sheets.url}/tokens.css was fetched without CORS (the link has no crossorigin attribute, or its server sends no Access-Control-Allow-Origin), so whether it carries the page's styles cannot be read`,
+      `design-kit: unknown(stylesheet-unreadable): ${sheets.url}/tokens.css was fetched without CORS (a link with no crossorigin attribute, a server that sends no Access-Control-Allow-Origin, or a cross-origin @import, which the browser fetches without CORS whatever its server sends), so whether it carries the page's styles cannot be read`,
     ]);
     assert.deepEqual(JSON.parse(fs.readFileSync(json, "utf8")).stylesheets, { requested: 1, failed: [], unreadable: [`${sheets.url}/tokens.css`], pending: [] });
   } finally {
@@ -626,6 +626,30 @@ test("validate-guide: a cross-origin sheet fetched with CORS and refused as octe
     const r = await validateUrl("cors-octet", { "/route": [200, "text/html", head(`<link rel="stylesheet" crossorigin="anonymous" href="${origin}/tokens.css">`)] });
     assert.equal(r.code, 3);
     assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [`${origin}/tokens.css`], unreadable: [], pending: [] });
+  } finally {
+    other.closeAllConnections();
+    await new Promise((r) => other.close(r));
+  }
+});
+
+// ---------------------------------------------------------------- review round 22
+
+test("validate-guide: a cross-origin @import is unreadable even when its server allows CORS, and the reason says an @import is fetched without CORS", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const other = http.createServer((req, res) => {
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("content-type", "text/css");
+    res.end(TOKENS);
+  });
+  await new Promise((r) => other.listen(0, "127.0.0.1", r));
+  const origin = `http://127.0.0.1:${other.address().port}`;
+  try {
+    const r = await validateUrl("xo-import", { "/route": [200, "text/html", head(`<style>@import url(${origin}/tokens.css);</style>`)] });
+    assert.equal(r.code, 3);
+    assert.deepEqual(r.lines, [
+      `design-kit: unknown(stylesheet-unreadable): ${origin}/tokens.css was fetched without CORS (a link with no crossorigin attribute, a server that sends no Access-Control-Allow-Origin, or a cross-origin @import, which the browser fetches without CORS whatever its server sends), so whether it carries the page's styles cannot be read`,
+    ]);
+    assert.deepEqual(r.report.stylesheets, { requested: 0, failed: [], unreadable: [`${origin}/tokens.css`], pending: [] });
   } finally {
     other.closeAllConnections();
     await new Promise((r) => other.close(r));

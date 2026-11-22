@@ -108,10 +108,11 @@ export function visualDiff(base: Record<string, unknown>, other: Record<string, 
  * value equal to that baseline is not taken as a token value.
  *
  * Names are read from every rule of every readable sheet, through `@import`s
- * and grouping rules (`@layer`, `@media`, `@supports`) too, to a nesting depth
- * of 16. A token declared deeper is not read: a page whose every token is that
- * deep reads no tokens (UNKNOWN), and one with only some of them that deep reads
- * a delta using an unread token as a non-token delta.
+ * and grouping rules (`@layer`, `@media`, `@supports`) too, down to 17 levels
+ * of nesting (a sheet's own rules are level 0). A token declared deeper is not
+ * read: a page whose every token is that deep reads no tokens (UNKNOWN), and one
+ * with only some of them that deep reads a delta using an unread token as a
+ * non-token delta.
  *
  * The kit's own state declaration (`--dk-kit-states`, on every component root)
  * is not a token: it is excluded from `count`, so a page whose token sheet is
