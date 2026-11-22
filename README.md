@@ -104,6 +104,20 @@ npm run typecheck && npm run lint && npm test
 
 `npm test` builds `dist/` first. The adapter tests build `@qontinui/design-tokens` at `415be45` from a clone of `$DESIGN_TOKENS_REPO` (a sibling `../qontinui-design-tokens` checkout, else GitHub) into `.dk-cache/`.
 
+## Changelog
+
+### 0.2.0
+
+Plan `2026-11-21-design-kit-compiler-gaps-and-the-unrequired-design-guide-check`, Phases 2 to 5. A minor bump under 0.x because verdicts change (D4). Each change a consumer's CI can see:
+
+- **`validate-guide`: a missing stylesheet exits 3, not 0 or 1.** A page whose linked stylesheet did not load (a `.css` 404 from the kit's file server, a `<link rel="stylesheet">` whose `sheet` is null, a sheet whose `cssRules` throws) now exits 3 `unknown(stylesheet-missing): <paths> did not load`. 0.1.x evaluated the browser defaults and returned a pass or a fail. A favicon, image or font 404 does not count. The report gains `stylesheets: { requested, failed }` and `target`. A cross-origin stylesheet the page cannot read also reads UNKNOWN.
+- **`check-states`: a missing token sheet, or a page with no token, is UNKNOWN (exit 3), not measured.** Token values are known only when every linked sheet loaded and the page declares a `--dk-*` token other than the kit's own `--dk-kit-states`. In 0.1.x `--dk-kit-states` alone counted as "tokens loaded", so a sheetless page was measured and usually exited 1 on non-token deltas. Every cell is now `unknown(stylesheet-missing): …` or `unknown(no-token-values): …`; `state-coverage.json` gains `stylesheets`, and the CLI prints the unknown reason before `unknown(nothing-measured)`.
+- **Guide `letterSpacings` (any `em` length) stay `em`.** 0.1.x converted `em` to px at a fixed 16px root (`0.025em` listed as `0.4px`). `rem` is still px at the 16px root.
+- **A shadow can name a colour.** An alias in a field of a shadow object, or an element of a shadow array, now resolves: `tokens.css` writes the colour's variable (`var(--dk-color-glow-primary)`), the guide's `tokens.shadows` and `tokens.ts` the resolved value. 0.1.x wrote the literal `{color.glow.primary}` text and exited 0. Such an alias that names no leaf, an undeclared leaf, or a leaf in a group that emits no variable, an alias cycle through a field, and an alias embedded in a longer string now exit 2. A shadow array renders as a comma-separated list (0.1.x refused it as "not a dimension"), `inset: true` is honoured, and a non-boolean `inset` or a layer with no `color` exits 2 (0.1.x rendered `undefined`). The single-light-source band reads every layer of an array shadow.
+- **The adapter imports `fontWeights`, `lineHeights` and `letterSpacings`.** A source asking for them compiled to exit 2 at parse in 0.1.x; they now resolve to `type.weight.*`, `type.leading.*` and `type.tracking.*`. A `letterSpacings` value that is not `<number>em` exits 2, naming the key. The package's 1 / 1.1 / 1.15 line heights list under `out_of_band`, not as errors.
+- **An undeclared leaf's `reason` reaches the report.** `$extensions.qontinui.reason` on an `undeclared` leaf replaces "stated undeclared in the source" in the compile report; a `reason` on any other source, or an empty one, exits 2 (0.1.x ignored it).
+- **New flags:** `validate-guide --storage-state <file>` (passed to the wrapper; an unreadable file exits 2) and `--json <file>` (written on exit 0, 1 and 3, with the `unknown(...)` reason). Either flag on another command exits 2.
+
 ## Licence
 
 MIT. A kit compiled into someone else's app cannot be AGPL (decision record `design-kit-is-mit-licensed`).
