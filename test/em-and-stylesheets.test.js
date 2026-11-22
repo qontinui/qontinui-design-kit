@@ -778,3 +778,23 @@ test("validate-guide: an @import whose supports() condition is false is not coun
   assert.equal(r.code, 0, r.lines.join("\n"));
   assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
 });
+
+// ---------------------------------------------------------------- review round 28
+
+test("validate-guide: a URL target whose path the browser escapes (a pipe character) is the same page, not a redirect (exit 0)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const dir = tmpDir("pipe-url");
+  const app = await routes({
+    "/a%7Cb": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css">')],
+    "/tokens.css": [200, "text/css", TOKENS],
+  });
+  try {
+    const guide = path.join(dir, "guide.json");
+    fs.writeFileSync(guide, JSON.stringify(GUIDE));
+    const lines = [];
+    assert.equal(await main(["validate-guide", guide, `${app.url}/a|b`, "--root", ROOT], (s) => lines.push(s)), 0, lines.join("\n"));
+  } finally {
+    await app.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

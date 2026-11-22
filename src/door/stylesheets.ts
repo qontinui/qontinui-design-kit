@@ -53,11 +53,11 @@
 export interface StylesheetLoad {
   /** The enabled `<link rel="stylesheet">` elements the page requested. */
   requested: number;
-  /** Sheets (linked or `@import`-ed) that did not load: a decoded path on the page's origin, else the full URL. */
+  /** Sheets (linked, `@import`-ed, or a failed `.css` a `<link>` requested) that did not load: a decoded path on the page's origin, else origin and path (no query); a marker such as `<link with an empty href>` as written. */
   failed: string[];
   /** Sheets whose rules cannot be read (another origin, no CORS), so whether they loaded is unknown. */
   unreadable: string[];
-  /** Linked sheets with no stylesheet and no recorded response when the page was read: still loading, or blocked. */
+  /** Linked or `@import`-ed sheets with no sheet, or an empty one, and no recorded response when the page was read: still loading, blocked, or a timing entry that was cleared. */
   pending: string[];
 }
 

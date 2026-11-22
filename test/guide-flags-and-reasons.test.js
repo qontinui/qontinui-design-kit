@@ -750,3 +750,24 @@ test("validate-guide: unknown(redirected) names the target by origin and path to
     p.cleanup();
   }
 });
+
+// ---------------------------------------------------------------- review round 28
+
+test("validate-guide: --root=<dir> or --json=<file> (refused as unknown options) clears nothing, so another root's report at the same name is kept", async () => {
+  const p = stubDoorProject();
+  const cwd = process.cwd();
+  try {
+    process.chdir(p.dir);
+    fs.mkdirSync(path.join(p.dir, "sub"));
+    const here = path.join(p.dir, "r.json");
+    const there = path.join(p.dir, "sub", "r.json");
+    for (const f of [here, there]) fs.writeFileSync(f, JSON.stringify({ schema: 1, exitCode: 0 }));
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root=sub", "--json", "r.json"], (s) => lines.push(s)), 2);
+    assert.equal(lines[0].split("\n")[0], "unknown option --root=sub");
+    assert.deepEqual([fs.existsSync(here), fs.existsSync(there)], [true, true]);
+  } finally {
+    process.chdir(cwd);
+    p.cleanup();
+  }
+});

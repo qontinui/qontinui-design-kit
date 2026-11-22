@@ -144,7 +144,8 @@ const VALUE_FLAGS: ReadonlySet<string> = new Set(Object.keys(VALUE_OPTIONS));
  * What a `validate-guide --json` argv names, read from the raw argv so it is known
  * before parsing can refuse the run: the report's path, and every path that may
  * be one of the run's inputs. Null when the argv names no report it could
- * resolve: a word before `validate-guide`, or a `--root` or `--json` with no value.
+ * resolve: a word before `validate-guide`, a `--root` or `--json` with no value,
+ * or either spelled `--root=<dir>` / `--json=<file>`.
  */
 function reportArgs(argv: string[]): { file: string; inputs: string[] } | null {
   let root = process.cwd();
@@ -153,6 +154,9 @@ function reportArgs(argv: string[]): { file: string; inputs: string[] } | null {
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const v = argv[i] as string;
+    // `--root=<dir>` or `--json=<file>` is refused as an unknown option, and the report it names is not the one a
+    // scan that missed it would resolve: clear nothing.
+    if (v.startsWith("--root=") || v.startsWith("--json=")) return null;
     if (VALUE_FLAGS.has(v)) {
       const next = argv[i + 1];
       if (!hasValue(next)) {
