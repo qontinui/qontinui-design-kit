@@ -284,7 +284,7 @@ test("an em type scale, spacing step and radius are listed at the 16px root, as 
 
 // ---------------------------------------------------------------- review round 2
 
-/** A page server with fixed routes (`path -> [status, type, body]`, a 3xx's body being its Location); `/slow.css` never answers until close. */
+/** A page server with fixed routes (`path -> [status, type, body]`, a 3xx's body being its Location, a null type sending no Content-Type); `/slow.css` never answers until close. */
 async function routes(map) {
   const sockets = [];
   const app = http.createServer((req, res) => {
@@ -292,7 +292,7 @@ async function routes(map) {
     const r = map[req.url] ?? [404, "text/html", "<!doctype html><h1>404</h1>"];
     res.statusCode = r[0];
     if (r[0] >= 300 && r[0] < 400) res.setHeader("location", r[2]);
-    else res.setHeader("content-type", r[1]);
+    else if (r[1] !== null) res.setHeader("content-type", r[1]); // null: no Content-Type header at all
     res.end(r[0] >= 300 && r[0] < 400 ? "" : r[2]);
   });
   app.on("connection", (sock) => sockets.push(sock));
@@ -564,4 +564,49 @@ test("validate-guide: a stylesheet link with no href attribute requests nothing,
   });
   assert.equal(r.code, 0);
   assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
+});
+
+// ---------------------------------------------------------------- review round 20
+
+test("validate-guide: a sheet served 200 as octet-stream (which Chromium refuses) did not load, as a link and as an @import (exit 3)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const linked = await validateUrl("octet-link", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css">')],
+    "/tokens.css": [200, "application/octet-stream", TOKENS],
+  });
+  assert.equal(linked.code, 3);
+  assert.deepEqual(linked.report.stylesheets, { requested: 1, failed: ["/tokens.css"], unreadable: [], pending: [] });
+  const imported = await validateUrl("octet-import", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/importer.css">')],
+    "/importer.css": [200, "text/css", '@import "/tokens.css";\n'],
+    "/tokens.css": [200, "binary/octet-stream", TOKENS],
+  });
+  assert.equal(imported.code, 3);
+  assert.deepEqual(imported.report.stylesheets, { requested: 1, failed: ["/tokens.css"], unreadable: [], pending: [] });
+});
+
+test("validate-guide: a sheet served with no Content-Type at all, which Chromium applies, is loaded (exit 0)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("no-type", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css">')],
+    "/tokens.css": [200, null, TOKENS],
+  });
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
+});
+
+test("validate-guide: the kit's file server serves an upper-case .CSS file as CSS, so a file target linking Tokens.CSS is evaluated (exit 0)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const dir = tmpDir("upper-css");
+  try {
+    const guide = path.join(dir, "guide.json");
+    const page = path.join(dir, "page.html");
+    fs.writeFileSync(guide, JSON.stringify(GUIDE));
+    fs.writeFileSync(page, PAGE.replace('href="tokens.css"', 'href="Tokens.CSS"'));
+    fs.writeFileSync(path.join(dir, "Tokens.CSS"), TOKENS);
+    const lines = [];
+    assert.equal(await main(["validate-guide", guide, page, "--root", ROOT], (s) => lines.push(s)), 0, lines.join("\n"));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

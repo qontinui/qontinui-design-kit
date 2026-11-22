@@ -125,7 +125,8 @@ export function serveDir(dir: string): Promise<ServedPage> {
         res.end("not found");
         return;
       }
-      res.setHeader("content-type", TYPES[path.extname(file)] ?? "application/octet-stream");
+      // By extension, case-insensitively: a `Tokens.CSS` served as octet-stream is a sheet Chromium refuses.
+      res.setHeader("content-type", TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream");
       res.end(fs.readFileSync(file));
     });
     server.listen(0, "127.0.0.1", () => {

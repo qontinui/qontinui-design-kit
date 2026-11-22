@@ -103,6 +103,18 @@ function samePath(a: string, b: string): boolean {
   }
 }
 
+/** A Playwright storageState: a JSON object with `cookies` and `origins` arrays. */
+function isStorageState(text: string): boolean {
+  try {
+    const v: unknown = JSON.parse(text);
+    if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+    const r = v as { cookies?: unknown; origins?: unknown };
+    return Array.isArray(r.cookies) && Array.isArray(r.origins);
+  } catch {
+    return false;
+  }
+}
+
 /** An earlier `validate-guide --json` report: a JSON object with `schema: 1` and a numeric `exitCode`. */
 function isGuideReport(text: string): boolean {
   try {
@@ -432,6 +444,11 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
     }
     if (!readable) {
       out(`design-kit: --storage-state ${storageState} is not a readable file`);
+      return 2;
+    }
+    // A file the wrapper cannot load as a storageState is a misused input (exit 2), not an instrument that could not measure.
+    if (!isStorageState(fs.readFileSync(storageState, "utf8"))) {
+      out(`design-kit: --storage-state ${storageState} is not a Playwright storageState (a JSON object with cookies and origins arrays)`);
       return 2;
     }
   }

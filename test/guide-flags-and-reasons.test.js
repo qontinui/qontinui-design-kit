@@ -668,3 +668,41 @@ test("validate-guide --json naming a file target given relative to the current d
     p.cleanup();
   }
 });
+
+// ---------------------------------------------------------------- review round 20
+
+test("a --storage-state file that is not a Playwright storageState (not JSON, or no cookies and origins arrays) is refused (exit 2) before any door runs", async () => {
+  const p = stubDoorProject();
+  try {
+    const cases = [
+      ["bad.json", "this is not json"],
+      ["shape.json", JSON.stringify({ cookies: [] })],
+    ];
+    for (const [name, body] of cases) {
+      fs.writeFileSync(path.join(p.dir, name), body);
+      const lines = [];
+      assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--storage-state", name], (s) => lines.push(s)), 2, name);
+      assert.deepEqual(lines, [`design-kit: --storage-state ${path.join(p.dir, name)} is not a Playwright storageState (a JSON object with cookies and origins arrays)`]);
+    }
+    assert.equal(fs.existsSync(path.join(p.dir, "node_modules", "@qontinui", "ui-bridge-wrapper", "dist", "argv.json")), false);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test("validate-guide: a page the door ended on at another origin (only the port or the scheme changed) is unknown(redirected); a changed query or fragment is the same page", async () => {
+  const p = stubDoorProject();
+  try {
+    const answers = (url) => [sheets([]), { action: "discover", result: {} }, SNAPSHOT, evaluated(["rgb(17, 17, 17)"]), sheets([]), evaluated(url)];
+    p.answer(answers("http://127.0.0.1:8/page"));
+    const moved = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir], (s) => moved.push(s)), 3);
+    assert.deepEqual(moved, ["design-kit: unknown(redirected): http://127.0.0.1:9/page was answered by http://127.0.0.1:8/page; a verdict there is not a verdict on the target"]);
+    p.answer(answers("http://127.0.0.1:9/page?x=1#y"));
+    const same = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir], (s) => same.push(s)), 0);
+    assert.deepEqual(same, ["design-kit validate-guide: 1 elements, 1 rules, 0 failures (@qontinui/ui-bridge-wrapper@9.9.9)"]);
+  } finally {
+    p.cleanup();
+  }
+});
