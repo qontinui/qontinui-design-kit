@@ -69,7 +69,17 @@ export interface Leaf {
 }
 
 /** The groups an `import` entry may ask a package adapter for. */
-export const IMPORT_GROUPS = ["color", "fontFamilies", "typeScale", "durations", "easings", "reducedMotion"] as const;
+export const IMPORT_GROUPS = [
+  "color",
+  "fontFamilies",
+  "typeScale",
+  "fontWeights",
+  "lineHeights",
+  "letterSpacings",
+  "durations",
+  "easings",
+  "reducedMotion",
+] as const;
 export type ImportGroup = (typeof IMPORT_GROUPS)[number];
 
 export interface ImportSpec {

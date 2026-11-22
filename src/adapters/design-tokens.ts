@@ -7,6 +7,10 @@
  *
  * A group the resolved package does not export stays `undeclared`, as an
  * explicit undeclared leaf. It is never silently empty.
+ *
+ * The typography groups (`fontWeights`, `lineHeights`, `letterSpacings`,
+ * exported since 415be45) map to `type.weight.*`, `type.leading.*` and
+ * `type.tracking.*`, the paths the theme and guide emitters already read.
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -139,6 +143,13 @@ function flatten(prefix: string, obj: Record<string, unknown>, out: [string, str
   }
 }
 
+/** `"0.04em"` -> `{ value: 0.04, unit: "em" }`; any other spelling is refused with the key named. */
+function emLength(pkg: TokenPackage, key: string, v: unknown): { value: number; unit: "em" } {
+  const m = typeof v === "string" ? /^(-?\d*\.?\d+)em$/.exec(v) : null;
+  if (!m) throw new Error(`${pkg.label} letterSpacings.${key} is ${JSON.stringify(v)}; the adapter reads only <number>em`);
+  return { value: parseFloat(m[1] as string), unit: "em" };
+}
+
 export interface AdapterResult {
   leaves: Leaf[];
 }
@@ -183,6 +194,21 @@ export function tokenLeaves(pkg: TokenPackage, groups: ImportGroup[] | null, sur
         );
       }
     }
+  }
+  if (wanted.has("fontWeights")) {
+    const w = pkg.exports["fontWeights"];
+    if (!isRecord(w)) missing("fontWeights", "type.weight");
+    else for (const [k, n] of Object.entries(w)) if (typeof n === "number") leaves.push(leaf(pkg, `type.weight.${k}`, "fontWeight", n));
+  }
+  if (wanted.has("lineHeights")) {
+    const h = pkg.exports["lineHeights"];
+    if (!isRecord(h)) missing("lineHeights", "type.leading");
+    else for (const [k, n] of Object.entries(h)) if (typeof n === "number") leaves.push(leaf(pkg, `type.leading.${k}`, "number", n));
+  }
+  if (wanted.has("letterSpacings")) {
+    const t = pkg.exports["letterSpacings"];
+    if (!isRecord(t)) missing("letterSpacings", "type.tracking");
+    else for (const [k, v] of Object.entries(t)) leaves.push(leaf(pkg, `type.tracking.${k}`, "dimension", emLength(pkg, k, v)));
   }
   if (wanted.has("durations")) {
     const d = pkg.exports["durations"];
