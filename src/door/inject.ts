@@ -149,7 +149,8 @@ export async function openPage(target: string): Promise<ServedPage> {
   const file = path.resolve(target);
   if (!fs.existsSync(file)) throw new Error(`not a URL and not a file: ${target}`);
   const server = await serveDir(path.dirname(file));
-  return { url: `${server.url}/${path.basename(file)}`, close: server.close, missed: server.missed };
+  // Encoded: a name holding #, ? or % would otherwise be requested as another path.
+  return { url: `${server.url}/${encodeURIComponent(path.basename(file))}`, close: server.close, missed: server.missed };
 }
 
 /** The value a `pageEvaluate` step returned, or undefined when it failed. */

@@ -15,16 +15,18 @@
  *   whose status is visible, whose type resource timing reports as empty and
  *   whose sheet has no rules: Chromium refuses `application/octet-stream` and
  *   reports it so (an empty sheet sent with no Content-Type reads the same way,
- *   toward UNKNOWN). A quirks-mode page
- *   (no doctype) applies a same-origin sheet served as `text/plain`, which this
- *   rule still counts as not loaded: the error is toward UNKNOWN, never a pass. Chromium gives both a non-null, empty `sheet`,
- *   so the timing entry is what catches them on a URL target. A link with no
+ *   toward UNKNOWN). A quirks-mode page (no doctype) applies a same-origin
+ *   sheet served as `text/plain`, which this rule still counts as not loaded:
+ *   the error is toward UNKNOWN, never a pass. Chromium gives both a non-null,
+ *   empty `sheet`, so the timing entry is what catches them on a URL target. A link with no
  *   sheet despite a response is counted as not loaded too;
  * - a link or an `@import` with no sheet and no recorded response is `pending`:
  *   still loading, or blocked before any response. So is one whose sheet has no
  *   rules and no recorded response: a 404'd sheet whose timing entry was cleared
- *   looks exactly like it. That is UNKNOWN, not a load failure. An `@import` naming a sheet above it (a cycle, which the browser
- *   does not follow) is not counted;
+ *   looks exactly like it. That is UNKNOWN, not a load failure. An `@import`
+ *   naming a sheet above it (a cycle, which the browser does not follow), or
+ *   one whose `supports()` condition is false (fetched, not applied), has no
+ *   sheet by design and is not counted;
  * - every `document.styleSheets` entry whose `cssRules` throws is `unreadable`:
  *   a sheet fetched without CORS from another origin (the link has no
  *   `crossorigin` attribute, its server sends no `Access-Control-Allow-Origin`,
@@ -109,10 +111,12 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
         try { href = new URL(r.href, sheet.href || document.baseURI).href; } catch (e) { /* keep as written */ }
       }
       const i = seen.get(href);
+      // An @import whose supports() condition is false is fetched but not applied, by design: no sheet, not a failure.
+      const conditionFalse = typeof r.supportsText === 'string' && r.supportsText !== '' && !CSS.supports(r.supportsText);
       if (badResponse(i) || refusedSheet(r.styleSheet, i)) failed.push(href);
       else if (r.styleSheet && i === undefined && emptySheet(r.styleSheet)) pending.push(href);
       else if (r.styleSheet) walkSheet(r.styleSheet, chain);
-      else if (!chain.includes(href)) (i === undefined || i.code === 0 ? pending : failed).push(href);
+      else if (!chain.includes(href) && !conditionFalse) (i === undefined || i.code === 0 ? pending : failed).push(href);
     }
   };
   for (const s of Array.from(document.styleSheets)) walkSheet(s, []);

@@ -719,3 +719,40 @@ test("validate-guide: a cross-origin sheet is named by origin and path, so a sig
     await new Promise((r) => other.close(r));
   }
 });
+
+// ---------------------------------------------------------------- review round 26
+
+test("validate-guide: an @import whose supports() condition is false is not applied by design, so it is not a sheet that did not load (exit 0); a 404 behind a true one is", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const falseCondition = await validateUrl("supports-false", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css"><style>@import url(/fallback.css) supports(not (display: grid));</style>')],
+    "/tokens.css": [200, "text/css", TOKENS],
+    "/fallback.css": [200, "text/css", "p { margin: 0; }\n"],
+  });
+  assert.equal(falseCondition.code, 0, falseCondition.lines.join("\n"));
+  assert.deepEqual(falseCondition.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
+  const trueCondition = await validateUrl("supports-true-404", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css"><style>@import url(/gone.css) supports(display: grid);</style>')],
+    "/tokens.css": [200, "text/css", TOKENS],
+  });
+  assert.equal(trueCondition.code, 3);
+  assert.deepEqual(trueCondition.report.stylesheets, { requested: 1, failed: ["/gone.css"], unreadable: [], pending: [] });
+});
+
+test("validate-guide: a file target whose name holds # or % is served as itself (exit 0), not as another path", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  for (const name of ["a#b.html", "100%.html"]) {
+    const dir = tmpDir("odd-name");
+    try {
+      const guide = path.join(dir, "guide.json");
+      const page = path.join(dir, name);
+      fs.writeFileSync(guide, JSON.stringify(GUIDE));
+      fs.writeFileSync(page, PAGE);
+      fs.writeFileSync(path.join(dir, "tokens.css"), TOKENS);
+      const lines = [];
+      assert.equal(await main(["validate-guide", guide, page, "--root", ROOT], (s) => lines.push(s)), 0, `${name}: ${lines.join("\n")}`);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
