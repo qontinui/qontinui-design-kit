@@ -139,16 +139,16 @@ const typed = (shadow, extra = {}) => ({
 });
 
 test("a shadow field alias must name a leaf of the field's type; a dimension alias in an offset compiles", async () => {
-  const refused = async (shadow) => {
+  const refusal = async (shadow) => {
     const r = await cli(typed(shadow));
     assert.equal(r.code, 2);
     return r.lines[0].replace("design-kit: the source was refused:\n  ", "");
   };
   const base = { offsetX: px(0), offsetY: px(0), blur: px(12), color: "#000000" };
-  assert.equal(await refused({ ...base, color: "{type.family.brand}" }), "leaf space.depth.glow: alias {type.family.brand} fills color, which needs a color leaf; type.family.brand is fontFamily");
-  assert.equal(await refused({ ...base, offsetX: "{color.glow.primary}" }), "leaf space.depth.glow: alias {color.glow.primary} fills offsetX, which needs a dimension leaf; color.glow.primary is color");
-  assert.equal(await refused({ ...base, blur: "{motion.duration.fast}" }), "leaf space.depth.glow: alias {motion.duration.fast} fills blur, which needs a dimension leaf; motion.duration.fast is duration");
-  assert.equal(await refused({ ...base, inset: "{color.glow.primary}" }), "leaf space.depth.glow: inset is true or false, never an alias");
+  assert.equal(await refusal({ ...base, color: "{type.family.brand}" }), "leaf space.depth.glow: alias {type.family.brand} fills color, which needs a color leaf; type.family.brand is fontFamily");
+  assert.equal(await refusal({ ...base, offsetX: "{color.glow.primary}" }), "leaf space.depth.glow: alias {color.glow.primary} fills offsetX, which needs a dimension leaf; color.glow.primary is color");
+  assert.equal(await refusal({ ...base, blur: "{motion.duration.fast}" }), "leaf space.depth.glow: alias {motion.duration.fast} fills blur, which needs a dimension leaf; motion.duration.fast is duration");
+  assert.equal(await refusal({ ...base, inset: "{color.glow.primary}" }), "leaf space.depth.glow: inset is true or false, never an alias");
   const { outputs } = await compile(typed({ ...base, offsetY: "{space.unit}" }));
   assert.match(outputs["tokens.css"], /^ {2}--dk-space-depth-glow: 0px var\(--dk-space-unit\) 12px 0px #000000;$/m);
   assert.equal(JSON.parse(outputs["fixture.styleguide.uibridge.json"]).tokens.shadows.glow, "0px 2px 12px 0px #000000");

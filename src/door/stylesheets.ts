@@ -50,7 +50,7 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
     });
   }
   // A response that is an error, or that is not CSS, is a sheet that did not load.
-  const refused = (i) => i !== undefined && (i.code >= 400 || (i.type !== '' && i.type !== 'text/css'));
+  const badResponse = (i) => i !== undefined && (i.code >= 400 || (i.type !== '' && i.type !== 'text/css'));
   const failed = [];
   const pending = [];
   const unreadable = [];
@@ -58,7 +58,7 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
   for (const l of links) {
     const href = l.href || l.getAttribute('href') || '<link with no href>';
     const i = seen.get(l.href);
-    if (refused(i)) failed.push(href);
+    if (badResponse(i)) failed.push(href);
     else if (!l.sheet) (i === undefined || i.code === 0 ? pending : failed).push(href);
   }
   const walk = (sheet, depth) => {
@@ -69,7 +69,7 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
       if (!(r instanceof CSSImportRule)) continue;
       let href = r.href;
       try { href = new URL(r.href, sheet.href || document.baseURI).href; } catch (e) { /* keep as written */ }
-      if (refused(seen.get(href))) failed.push(href);
+      if (badResponse(seen.get(href))) failed.push(href);
       else if (r.styleSheet) walk(r.styleSheet, depth + 1);
     }
   };
