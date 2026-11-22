@@ -49,7 +49,7 @@ export interface StateCoverage {
   /** The published door that measured, e.g. `@qontinui/ui-bridge-wrapper@0.12.0`. */
   instrument: string;
   summary: { cells: number; measured: number; baseline: number; unknown: number; findings: number };
-  /** The page's linked stylesheets; null when the instrument did not answer. A failed, pending or unreadable sheet makes every cell UNKNOWN. */
+  /** The page's linked stylesheets; null when the instrument did not answer. A failed, pending or unreadable sheet makes every measured non-baseline cell UNKNOWN. */
   stylesheets: StylesheetLoad | null;
   findings: { id: string; finding: "no-delta" | "non-token-delta"; detail: string }[];
   cells: CellResult[];

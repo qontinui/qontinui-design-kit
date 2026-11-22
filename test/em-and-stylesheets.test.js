@@ -756,3 +756,25 @@ test("validate-guide: a file target whose name holds # or % is served as itself 
     }
   }
 });
+
+// ---------------------------------------------------------------- review round 27
+
+test("validate-guide: a .css a <link> requested that 404'd with no stylesheet link naming it (an async preload) did not load on a URL target too (exit 3)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("preload-404", {
+    "/route": [200, "text/html", head(`<link rel="stylesheet" href="/tokens.css"><link rel="preload" href="/async.css" as="style" onload="this.onload=null;this.rel='stylesheet'">`)],
+    "/tokens.css": [200, "text/css", TOKENS],
+  });
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: ["/async.css"], unreadable: [], pending: [] });
+});
+
+test("validate-guide: an @import whose supports() condition is false is not counted even when it 404s, since it is never applied (exit 0)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("supports-false-404", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css"><style>@import url(/legacy.css) supports(not (display: grid));</style>')],
+    "/tokens.css": [200, "text/css", TOKENS],
+  });
+  assert.equal(r.code, 0, r.lines.join("\n"));
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
+});

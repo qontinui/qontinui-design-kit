@@ -25,8 +25,12 @@
  *   rules and no recorded response: a 404'd sheet whose timing entry was cleared
  *   looks exactly like it. That is UNKNOWN, not a load failure. An `@import`
  *   naming a sheet above it (a cycle, which the browser does not follow), or
- *   one whose `supports()` condition is false (fetched, not applied), has no
- *   sheet by design and is not counted;
+ *   one whose `supports()` condition is false (fetched, never applied, whatever
+ *   its response), has no sheet by design and is not counted;
+ * - a `.css` a `<link>` requested whose response timing reports bad (a preload
+ *   whose `onload` never swapped its `rel`, a link removed on error) did not
+ *   load, though no stylesheet link names it, as the kit's server records for a
+ *   file target;
  * - every `document.styleSheets` entry whose `cssRules` throws is `unreadable`:
  *   a sheet fetched without CORS from another origin (the link has no
  *   `crossorigin` attribute, its server sends no `Access-Control-Allow-Origin`,
@@ -64,6 +68,7 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
     seen.set(e.name, {
       code: typeof e.responseStatus === 'number' && e.responseStatus > 0 ? e.responseStatus : 0,
       type: typeof e.contentType === 'string' ? e.contentType.split(';')[0].trim().toLowerCase() : '',
+      initiator: e.initiatorType,
     });
   }
   // A response that is an error, or that is not CSS, is a sheet that did not load.
@@ -110,16 +115,23 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
       if (!(r.styleSheet && r.styleSheet.href)) {
         try { href = new URL(r.href, sheet.href || document.baseURI).href; } catch (e) { /* keep as written */ }
       }
+      // An @import whose supports() condition is false is fetched but never applied, by design: whatever its response,
+      // it is not counted.
+      if (typeof r.supportsText === 'string' && r.supportsText !== '' && !CSS.supports(r.supportsText)) continue;
       const i = seen.get(href);
-      // An @import whose supports() condition is false is fetched but not applied, by design: no sheet, not a failure.
-      const conditionFalse = typeof r.supportsText === 'string' && r.supportsText !== '' && !CSS.supports(r.supportsText);
       if (badResponse(i) || refusedSheet(r.styleSheet, i)) failed.push(href);
       else if (r.styleSheet && i === undefined && emptySheet(r.styleSheet)) pending.push(href);
       else if (r.styleSheet) walkSheet(r.styleSheet, chain);
-      else if (!chain.includes(href) && !conditionFalse) (i === undefined || i.code === 0 ? pending : failed).push(href);
+      else if (!chain.includes(href)) (i === undefined || i.code === 0 ? pending : failed).push(href);
     }
   };
   for (const s of Array.from(document.styleSheets)) walkSheet(s, []);
+  // A .css a <link> requested that failed did not load even with no stylesheet link naming it now (a preload whose
+  // onload never swapped its rel, a link removed on error), as the kit's server records it for a file target.
+  for (const [name, i] of seen) {
+    if (i.initiator !== 'link' || !badResponse(i) || failed.includes(name)) continue;
+    try { if (new URL(name).pathname.toLowerCase().endsWith('.css')) failed.push(name); } catch (e) { /* not a URL */ }
+  }
   return { requested: links.length, failed, unreadable, pending };
 })()`;
 
