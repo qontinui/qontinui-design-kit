@@ -629,6 +629,13 @@ test("validate-guide --json /dev/stdout is refused (exit 2) when stdout is a fil
   const p = stubDoorProject();
   try {
     const args = ["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "/dev/stdout"];
+    // In process: under node --test this file's stdout is the runner's pipe, so /dev/stdout is refused here too.
+    const fd1 = fs.fstatSync(1);
+    if (fd1.isFIFO() || fd1.isSocket() || fd1.isFile()) {
+      const lines = [];
+      assert.equal(await main(args, (s) => lines.push(s)), 2);
+      assert.deepEqual(lines, [STDOUT_REFUSAL]);
+    }
     const file = path.join(p.dir, "out.txt");
     const fd = fs.openSync(file, "w");
     try {
