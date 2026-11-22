@@ -19,6 +19,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { npmLauncher } from "./npm.js";
 import type { ImportGroup, ImportSpec, Leaf, ValueType } from "../source/schema.js";
 import { IMPORT_GROUPS, SourceError } from "../source/schema.js";
 
@@ -46,8 +47,12 @@ export interface LoadContext {
 }
 
 function run(cmd: string, args: string[], cwd: string): string {
+  // npm goes through its own entry point under this node: no shell anywhere.
+  const npm = cmd === "npm" ? npmLauncher() : null;
+  const file = npm ? npm.file : cmd;
+  const argv = npm ? [...npm.prefix, ...args] : args;
   try {
-    return execFileSync(cmd, args, {
+    return execFileSync(file, argv, {
       cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
@@ -58,7 +63,8 @@ function run(cmd: string, args: string[], cwd: string): string {
     });
   } catch (e) {
     const err = e as { stderr?: string; message: string };
-    throw new Error(`${cmd} ${args.join(" ")} failed in ${cwd}: ${(err.stderr ?? err.message).toString().slice(-600)}`);
+    const via = npm ? ` (via ${npm.source}: ${[npm.file, ...npm.prefix].join(" ")})` : "";
+    throw new Error(`${cmd} ${args.join(" ")}${via} failed in ${cwd}: ${(err.stderr ?? err.message).toString().slice(-600)}`);
   }
 }
 

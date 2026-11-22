@@ -11,7 +11,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ROOT } from "./helpers.js";
+import { ROOT, runNpm } from "./helpers.js";
 
 test("git dependency: prepare builds dist/ and the package imports with a bin", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dk-probe2-"));
@@ -32,7 +32,7 @@ test("git dependency: prepare builds dist/ and the package imports with a bin", 
     const consumer = path.join(tmp, "consumer");
     fs.mkdirSync(consumer);
     fs.writeFileSync(path.join(consumer, "package.json"), JSON.stringify({ name: "consumer", version: "1.0.0", type: "module" }));
-    execFileSync("npm", ["install", "--no-audit", "--no-fund", `git+file://${src}#${sha}`], {
+    runNpm(["install", "--no-audit", "--no-fund", `git+file://${src}#${sha}`], {
       cwd: consumer,
       stdio: "pipe",
       encoding: "utf8",
@@ -46,7 +46,7 @@ test("git dependency: prepare builds dist/ and the package imports with a bin", 
       { cwd: consumer, encoding: "utf8" },
     ).trim();
     assert.equal(out, "@qontinui/design-kit");
-    const npmVersion = execFileSync("npm", ["--version"], { encoding: "utf8" }).trim();
+    const npmVersion = runNpm(["--version"], { encoding: "utf8" }).trim();
     console.log(`probe 2: npm ${npmVersion}, arm = prepare-builds-dist (no tracked dist/)`);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

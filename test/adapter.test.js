@@ -3,12 +3,12 @@
 // GitHub, in that order). Resolve first: nothing is copied into the source.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { compileSource, loadTokenPackage, tokenLeaves } from "../dist/index.js";
 import { main } from "../dist/cli.js";
 import { CACHE_DIR, SHA, SHORT, leaf, mkProject, tokensRepo } from "./project.js";
+import { runNpm } from "./helpers.js";
 
 const ctx = (rootDir) => ({ rootDir, tokensRepo: tokensRepo(), cacheDir: CACHE_DIR });
 const spec = (groups = null) => ({ package: "@qontinui/design-tokens", ref: SHORT, groups });
@@ -76,7 +76,7 @@ test("the published @qontinui/design-tokens@1.0.0 lacks typeScale, durations and
   const p = mkProject({});
   try {
     fs.writeFileSync(path.join(p.dir, "package.json"), JSON.stringify({ name: "c", version: "1.0.0", private: true }));
-    execFileSync("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", "@qontinui/design-tokens@1.0.0"], { cwd: p.dir, stdio: "pipe" });
+    runNpm(["install", "--no-audit", "--no-fund", "--ignore-scripts", "@qontinui/design-tokens@1.0.0"], { cwd: p.dir, stdio: "pipe" });
     const pkg = await loadTokenPackage({ package: "@qontinui/design-tokens", ref: null, groups: null }, { rootDir: p.dir });
     assert.equal(pkg.version, "1.0.0");
     assert.equal(pkg.label, "@qontinui/design-tokens@1.0.0");

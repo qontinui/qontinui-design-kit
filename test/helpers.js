@@ -1,9 +1,11 @@
 // Shared helpers for the test files. Plain ESM, no framework: `node --test`.
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
+import { npmLauncher } from "../dist/adapters/npm.js";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -25,4 +27,10 @@ export function emittedClasses(css) {
     out.add(m[1].replace(/\\(.)/g, "$1"));
   }
   return out;
+}
+
+/** Run npm the way the kit does (npm-cli.js under this node on Windows), never through a shell. */
+export function runNpm(args, opts = {}) {
+  const l = npmLauncher();
+  return execFileSync(l.file, [...l.prefix, ...args], opts);
 }
