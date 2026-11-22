@@ -1,6 +1,7 @@
 // Plan 2026-11-21-design-kit-compiler-gaps Phase 2: an `em` length stays `em`
 // in the guide, and a page whose stylesheet did not load reads UNKNOWN (exit 3)
-// instead of a verdict over browser defaults. Every expectation is a literal.
+// instead of a verdict over browser defaults. Every expectation is a literal,
+// except the element count of a page, which the door decides.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -96,7 +97,8 @@ test("validate-guide: a page whose linked tokens.css 404s exits 3 naming it; wit
     fs.writeFileSync(path.join(dir, "tokens.css"), ":root { --dk-text: #111111; }\n");
     const present = [];
     assert.equal(await main(["validate-guide", guide, page, "--root", ROOT, "--json", json], (s) => present.push(s)), 0);
-    assert.equal(present.at(-1), "design-kit validate-guide: 2 elements, 1 rules, 0 failures (@qontinui/ui-bridge-wrapper@0.12.0)");
+    // The element count is the door's (it measured 1 and 2 on one page across runs), so it is the one value matched by pattern.
+    assert.match(present.at(-1), /^design-kit validate-guide: \d+ elements, 1 rules, 0 failures \(@qontinui\/ui-bridge-wrapper@0\.12\.0\)$/);
     const report = JSON.parse(fs.readFileSync(json, "utf8"));
     assert.deepEqual([report.exitCode, report.unknown, report.stylesheets], [0, null, { requested: 1, failed: [], unreadable: [], pending: [] }]);
   } finally {
@@ -412,7 +414,7 @@ test("validate-guide: a stylesheet link with an empty href did not load; it is n
     "/tokens.css": [200, "text/css", TOKENS],
   });
   assert.equal(r.code, 3);
-  assert.deepEqual(r.report.stylesheets, { requested: 2, failed: ["<link with no href>"], unreadable: [], pending: [] });
+  assert.deepEqual(r.report.stylesheets, { requested: 2, failed: ["<link with an empty href>"], unreadable: [], pending: [] });
 });
 
 // ---------------------------------------------------------------- review round 5
@@ -547,6 +549,18 @@ test("validate-guide: a cyclic @import, which the browser skips by design, is no
     "/route": [200, "text/html", head('<link rel="stylesheet" href="/s0.css">')],
     "/s0.css": [200, "text/css", `@import "/s1.css";\n${TOKENS}`],
     "/s1.css": [200, "text/css", '@import "/s0.css";\n'],
+  });
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
+});
+
+// ---------------------------------------------------------------- review round 19
+
+test("validate-guide: a stylesheet link with no href attribute requests nothing, so it is not a sheet that did not load (exit 0)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("no-href", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet">')],
+    "/tokens.css": [200, "text/css", TOKENS],
   });
   assert.equal(r.code, 0);
   assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });

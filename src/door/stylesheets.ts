@@ -5,8 +5,9 @@
  *
  * - the kit's loopback server records each `.css` request it answered 404
  *   (`missed()`; always empty for a URL target, which the kit does not serve);
- * - page-side, for every enabled `<link rel="stylesheet">` (a `disabled` link
- *   never has a sheet, by design, and is not counted) and every `@import` in a
+ * - page-side, for every enabled `<link rel="stylesheet">` with an `href` (a
+ *   `disabled` link never has a sheet, by design, and a link with no `href`
+ *   requests nothing; neither is counted) and every `@import` in a
  *   readable sheet: the page's resource timing entry. A `responseStatus` of 400
  *   or more, or a `contentType` that is not `text/css` (a dev server answering
  *   a missing `.css` path with its HTML shell, which Chromium refuses to apply
@@ -63,13 +64,12 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
   const pending = [];
   const unreadable = [];
   // A disabled link has no sheet by design; one whose type is not CSS (by MIME essence: "text/css; charset=utf-8"
-  // is CSS) is never fetched. Neither is counted.
+  // is CSS) is never fetched; one with no href attribute requests nothing. None of them is counted.
   const isCss = (t) => t.split(';')[0].trim().toLowerCase() === 'text/css';
-  const links = Array.from(document.querySelectorAll('link[rel~="stylesheet" i]')).filter((l) => !l.disabled && (!l.type || isCss(l.type)));
+  const links = Array.from(document.querySelectorAll('link[rel~="stylesheet" i]')).filter((l) => !l.disabled && l.hasAttribute('href') && (!l.type || isCss(l.type)));
   for (const l of links) {
     // An empty href resolves to the page itself and never loads: a sheet that did not load, not one still loading.
-    const raw = l.getAttribute('href');
-    if (raw === null || raw.trim() === '') { failed.push('<link with no href>'); continue; }
+    if (l.getAttribute('href').trim() === '') { failed.push('<link with an empty href>'); continue; }
     const href = l.href;
     const i = seen.get(l.href);
     if (badResponse(i)) failed.push(href);

@@ -129,18 +129,12 @@ const VALUE_OPTIONS = {
 const VALUE_FLAGS: ReadonlySet<string> = new Set(Object.keys(VALUE_OPTIONS));
 
 /**
- * `validate-guide --json <file>`: remove an earlier report before anything can
- * refuse the run (exit 2), argument parsing included, so a refused run leaves no
- * previous verdict standing at that path. It reads the raw argv for that reason.
- * Two argvs name no report it could resolve and clear nothing: one with a word
- * before `validate-guide`, and one whose `--root` or `--json` has no value. Only
- * an earlier report is removed: a path that names the guide, a file target, the
- * storage state or any other bare word, any other file that is not a report, or
- * a directory, is refused with exit 2 and left as it is. A path that is not a
- * regular file (a pipe, /dev/null) or is empty is left for the report to be
- * written into. Returns the exit code to stop with, or null to go on.
+ * What a `validate-guide --json` argv names, read from the raw argv so it is known
+ * before parsing can refuse the run: the report's path, and every path that may
+ * be one of the run's inputs. Null when the argv names no report it could
+ * resolve: a word before `validate-guide`, or a `--root` or `--json` with no value.
  */
-function clearJsonReport(argv: string[], out: Out): number | null {
+function reportArgs(argv: string[]): { file: string; inputs: string[] } | null {
   let root = process.cwd();
   let json: string | null = null;
   let storageState: string | null = null;
@@ -163,7 +157,6 @@ function clearJsonReport(argv: string[], out: Out): number | null {
     } else if (!v.startsWith("-")) positional.push(v);
   }
   if (positional[0] !== "validate-guide" || json === null) return null;
-  const file = path.resolve(root, json);
   // Every bare word may be an input: a mistyped option's value shifts the guide and the target along,
   // so each word is checked, resolved against --root (the guide's base) and the cwd (a file target's).
   const inputs = positional
@@ -171,43 +164,67 @@ function clearJsonReport(argv: string[], out: Out): number | null {
     .filter((w) => !isUrlTarget(w))
     .flatMap((w) => [path.resolve(root, w), path.resolve(w)]);
   if (storageState) inputs.push(path.resolve(root, storageState));
-  if (inputs.some((f) => samePath(f, file))) {
-    out(`design-kit: --json ${file} is one of validate-guide's inputs; refusing to overwrite it`);
-    return 2;
+  return { file: path.resolve(root, json), inputs };
+}
+
+/** This process's stdout when the report could be written into it (a file, a pipe or a socket); else null. */
+function ownStdout(): fs.Stats | null {
+  try {
+    const st = fs.fstatSync(1);
+    return st.isFile() || st.isFIFO() || st.isSocket() ? st : null;
+  } catch {
+    return null;
   }
-  // Only an earlier report is removed. Any other file there (a page, another tool's JSON, a path
-  // `--json` took when read as a switch) is refused and kept, whatever shape the argv has. A path that
-  // is not a regular file (a pipe, /dev/null) or is empty holds no verdict: it is not read, so a FIFO
-  // cannot hold the run, and the report is written into it.
+}
+
+/**
+ * `validate-guide --json <file>`: remove an earlier report before anything can
+ * refuse the run (exit 2), argument parsing included, so a refused run leaves no
+ * previous verdict standing at that path (unless the argv names no report, see
+ * `reportArgs`). Only an earlier report is removed. Refused with exit 2 and left
+ * as it is: a path that is one of the run's inputs, the run's own stdout (which
+ * carries the verdict), a directory, or any other file that is not a report. A
+ * path that is not a regular file (a pipe, /dev/null) or is empty is not read:
+ * the report is written into it. Returns the exit code to stop with, or null to go on.
+ */
+function clearJsonReport(argv: string[], out: Out): number | null {
+  const named = reportArgs(argv);
+  if (named === null) return null;
+  const { file, inputs } = named;
+  const refuseJson = (why: string): number => {
+    out(`design-kit: --json ${file} ${why}`);
+    return 2;
+  };
+  if (inputs.some((f) => samePath(f, file))) return refuseJson("is one of validate-guide's inputs; refusing to overwrite it");
   let st: fs.Stats;
   try {
     st = fs.statSync(file);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-    out(`design-kit: --json ${file} cannot be replaced: ${(e as Error).message}`);
-    return 2;
+    return refuseJson(`cannot be replaced: ${(e as Error).message}`);
   }
-  if (st.isDirectory()) {
-    out(`design-kit: --json ${file} cannot be replaced: it is a directory`);
-    return 2;
+  // A report on the run's own stdout would replace the verdict (a file reopened for writing) or follow it into one stream.
+  const stdout = ownStdout();
+  if (stdout !== null && st.dev === stdout.dev && st.ino === stdout.ino) {
+    return refuseJson("is this run's own stdout, which carries the verdict; refusing to write the report there");
   }
+  if (st.isDirectory()) return refuseJson("cannot be replaced: it is a directory");
+  // A pipe or a device holds no verdict and is never read, so a FIFO cannot hold the run; nor does an empty file.
   if (!st.isFile() || st.size === 0) return null;
   let text: string;
   try {
     text = fs.readFileSync(file, "utf8");
   } catch (e) {
-    out(`design-kit: --json ${file} cannot be replaced: ${(e as Error).message}`);
-    return 2;
+    return refuseJson(`cannot be replaced: ${(e as Error).message}`);
   }
+  // Any other file there (a page, another tool's JSON, a path `--json` took when read as a switch) is kept.
   if (!isGuideReport(text)) {
-    out(`design-kit: --json ${file} is not an earlier validate-guide report (a JSON object with schema 1 and a numeric exitCode); refusing to overwrite it`);
-    return 2;
+    return refuseJson("is not an earlier validate-guide report (a JSON object with schema 1 and a numeric exitCode); refusing to overwrite it");
   }
   try {
     fs.rmSync(file, { force: true });
   } catch (e) {
-    out(`design-kit: --json ${file} cannot be replaced: ${(e as Error).message}`);
-    return 2;
+    return refuseJson(`cannot be replaced: ${(e as Error).message}`);
   }
   return null;
 }

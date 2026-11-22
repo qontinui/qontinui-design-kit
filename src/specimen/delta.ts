@@ -108,7 +108,9 @@ export function visualDiff(base: Record<string, unknown>, other: Record<string, 
  * value equal to that baseline is not taken as a token value.
  *
  * Names are read from every rule of every readable sheet, through `@import`s
- * and grouping rules (`@layer`, `@media`, `@supports`) too.
+ * and grouping rules (`@layer`, `@media`, `@supports`) too, to a nesting depth
+ * of 16: a token declared deeper than that is not read, so such a page reads
+ * no tokens (UNKNOWN, never a pass).
  *
  * The kit's own state declaration (`--dk-kit-states`, on every component root)
  * is not a token: it is excluded from `count`, so a page whose token sheet is

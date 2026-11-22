@@ -4,7 +4,7 @@
 // exit 0, 1 and 3). Every expectation is a literal.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { compileSource, parseSource, SourceError } from "../dist/index.js";
@@ -606,6 +606,58 @@ test("validate-guide --json naming an empty file or /dev/null clears nothing and
       assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "/dev/null"], () => undefined), 3);
     }
   } finally {
+    p.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- review round 19
+
+const runBin = (args, stdio) =>
+  new Promise((resolve) => {
+    const child = spawn(process.execPath, [BIN, ...args], { stdio, timeout: 15000 });
+    let stdout = "";
+    child.stdout?.on("data", (d) => (stdout += d));
+    child.on("close", (code, signal) => resolve({ code: code ?? signal, stdout }));
+  });
+const STDOUT_REFUSAL = "design-kit: --json /dev/stdout is this run's own stdout, which carries the verdict; refusing to write the report there";
+
+test("validate-guide --json /dev/stdout is refused (exit 2) when stdout is a file or a pipe: the report would replace or follow the verdict", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("no /dev/stdout on Windows");
+    return;
+  }
+  const p = stubDoorProject();
+  try {
+    const args = ["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "/dev/stdout"];
+    const file = path.join(p.dir, "out.txt");
+    const fd = fs.openSync(file, "w");
+    try {
+      assert.equal((await runBin(args, ["ignore", fd, "ignore"])).code, 2);
+    } finally {
+      fs.closeSync(fd);
+    }
+    assert.equal(fs.readFileSync(file, "utf8"), STDOUT_REFUSAL + "\n");
+    assert.deepEqual(await runBin(args, ["ignore", "pipe", "ignore"]), { code: 2, stdout: STDOUT_REFUSAL + "\n" });
+  } finally {
+    p.cleanup();
+  }
+});
+
+test("validate-guide --json naming a file target given relative to the current directory, under another --root, is refused as an input", async () => {
+  const p = stubDoorProject();
+  const cwd = process.cwd();
+  const here = tmpDir("here");
+  try {
+    const page = path.join(here, "page.html");
+    fs.writeFileSync(page, "");
+    process.chdir(here);
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "page.html", "--root", p.dir, "--json", page], (s) => lines.push(s)), 2);
+    assert.deepEqual(lines, [`design-kit: --json ${page} is one of validate-guide's inputs; refusing to overwrite it`]);
+    assert.equal(fs.readFileSync(page, "utf8"), "");
+  } finally {
+    process.chdir(cwd);
+    fs.rmSync(here, { recursive: true, force: true });
     p.cleanup();
   }
 });
