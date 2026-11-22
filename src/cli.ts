@@ -117,13 +117,13 @@ const VALUE_FLAGS: ReadonlySet<string> = new Set(Object.keys(VALUE_OPTIONS));
 
 /**
  * `validate-guide --json <file>`: remove an earlier report before anything can
- * refuse the run (exit 2), argument parsing included, so a refused run never
- * leaves a previous verdict standing at that path. It reads the raw argv for
- * that reason. A path that names any word of the command line (the guide, a
- * file target, the storage state), or that cannot be removed (a directory), is
- * refused with exit 2 and left as it is. Only a `--root` or `--json` with no
- * value leaves the report's path unknown, and then nothing is cleared.
- * Returns the exit code to stop with, or null to go on.
+ * refuse the run (exit 2), argument parsing included, so a refused run leaves no
+ * previous verdict standing at that path. It reads the raw argv for that reason.
+ * Two argvs name no report it could resolve and clear nothing: one with a word
+ * before `validate-guide`, and one whose `--root` or `--json` has no value. A
+ * path that names any word of the command line (the guide, a file target, the
+ * storage state), or that cannot be removed (a directory), is refused with
+ * exit 2 and left as it is. Returns the exit code to stop with, or null to go on.
  */
 function clearJsonReport(argv: string[], out: Out): number | null {
   let root = process.cwd();

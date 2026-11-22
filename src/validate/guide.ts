@@ -159,7 +159,7 @@ export interface GuideJson {
   exitCode: 0 | 1 | 3;
   /** The `unknown(...)` reason on exit 3, else null. */
   unknown: string | null;
-  /** Null on a run that stopped before it read the page's elements. */
+  /** Null on a run that stopped before it read the target's whole element list (a redirect, a truncated snapshot). */
   elements: number | null;
   rules: number;
   /** Null on a run that stopped before it evaluated a rule: never `[]`, which would read as "nothing failed". */
@@ -244,12 +244,13 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
     if (!snap?.elements || !Array.isArray(canon)) {
       throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} gave no design snapshot (${run.stderr.slice(0, 160).replace(/\s+/g, " ")})`);
     }
-    known.elements = snap.elements.length;
     const readUrl = evalValue(run.lines[5]);
     if (typeof readUrl !== "string") throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} did not say which page it read`);
     if (!samePage(page.url, readUrl)) {
       throw unknownVerdict(`unknown(redirected): ${target} was answered by ${readUrl}; a verdict there is not a verdict on the target`);
     }
+    // The count is the target's only once the page is the target and the snapshot is whole; a truncated one is a floor.
+    if (!snap.truncated) known.elements = snap.elements.length;
     // A missing sheet leaves the page on browser defaults: whatever the rules say about it is not about the design.
     const stylesheets = mergeStylesheetLoads(
       stylesheetLoad(evalValue(run.lines[0]), page.url, []),

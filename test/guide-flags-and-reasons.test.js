@@ -247,7 +247,7 @@ test("validate-guide --json naming the --storage-state file, or found behind an 
     fs.writeFileSync(page, "<!doctype html><p>x</p>");
     const shifted = [];
     assert.equal(await main(["validate-guide", "--file", "", "guide.json", page, "--root", p.dir, "--json", page], (s) => shifted.push(s)), 2);
-    // The empty word is --file's value, so the page is still found among the bare words and kept.
+    // Every bare word is checked as an input, so the page is found and kept.
     assert.deepEqual(shifted, [`design-kit: --json ${page} is one of validate-guide's inputs; refusing to overwrite it`]);
     assert.equal(fs.existsSync(page), true);
   } finally {
@@ -457,7 +457,8 @@ test("validate-guide: a page the door ended on another path of (a login redirect
     const why = "unknown(redirected): http://127.0.0.1:9/app was answered by http://127.0.0.1:9/login?next=%2Fapp; a verdict there is not a verdict on the target";
     assert.deepEqual(lines, [`design-kit: ${why}`]);
     const r = JSON.parse(fs.readFileSync(path.join(p.dir, "r.json"), "utf8"));
-    assert.deepEqual([r.exitCode, r.unknown, r.elements, r.failures, r.stylesheets], [3, why, 1, null, null]);
+    // The elements read were the login page's, not the target's: the count is null, not theirs.
+    assert.deepEqual([r.exitCode, r.unknown, r.elements, r.failures, r.stylesheets], [3, why, null, null, null]);
   } finally {
     p.cleanup();
   }
@@ -499,6 +500,38 @@ test("validate-guide: a guide none of whose rules answers to an element is unkno
       stylesheets: none,
       instrument: "@qontinui/ui-bridge-wrapper@9.9.9",
     });
+  } finally {
+    p.cleanup();
+  }
+});
+
+
+// ---------------------------------------------------------------- review round 15
+
+test("validate-guide: an empty flag value before the command is that flag's value, so validate-guide is still read and the report is cleared", async () => {
+  const p = stubDoorProject();
+  const cwd = process.cwd();
+  try {
+    process.chdir(p.dir);
+    fs.writeFileSync(path.join(p.dir, "r.json"), JSON.stringify({ exitCode: 0 }));
+    const lines = [];
+    assert.equal(await main(["--file", "", "validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "r.json"], (s) => lines.push(s)), 2);
+    assert.equal(lines[0].split("\n")[0], "--file needs a value");
+    assert.equal(fs.existsSync(path.join(p.dir, "r.json")), false);
+  } finally {
+    process.chdir(cwd);
+    p.cleanup();
+  }
+});
+
+test("validate-guide: a truncated snapshot is unknown(snapshot-truncated) and its report's element count is null, not the cap", async () => {
+  const p = stubDoorProject();
+  try {
+    const snap = { action: "getDesignSnapshot", result: { elements: [{ elementId: "dom-go", type: "button", styles: { color: "rgb(17, 17, 17)" } }], truncated: true } };
+    p.answer([sheets([]), { action: "discover", result: {} }, snap, evaluated(["rgb(17, 17, 17)"]), sheets([]), evaluated("http://127.0.0.1:9/page")]);
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "r.json"], () => undefined), 3);
+    const r = JSON.parse(fs.readFileSync(path.join(p.dir, "r.json"), "utf8"));
+    assert.deepEqual([r.exitCode, r.unknown, r.elements], [3, "unknown(snapshot-truncated): the page has more elements than one snapshot returns", null]);
   } finally {
     p.cleanup();
   }
