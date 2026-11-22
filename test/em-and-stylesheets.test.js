@@ -267,15 +267,16 @@ test("an em type scale is listed at the 16px root, as in 0.1.x, and its heading 
 
 // ---------------------------------------------------------------- review round 2
 
-/** A page server with fixed routes (`path -> [status, type, body]`); `/slow.css` never answers until close. */
+/** A page server with fixed routes (`path -> [status, type, body]`, a 3xx's body being its Location); `/slow.css` never answers until close. */
 async function routes(map) {
   const sockets = [];
   const app = http.createServer((req, res) => {
     if (req.url === "/slow.css") return; // held open: the request never gets a response
     const r = map[req.url] ?? [404, "text/html", "<!doctype html><h1>404</h1>"];
     res.statusCode = r[0];
-    res.setHeader("content-type", r[1]);
-    res.end(r[2]);
+    if (r[0] >= 300 && r[0] < 400) res.setHeader("location", r[2]);
+    else res.setHeader("content-type", r[1]);
+    res.end(r[0] >= 300 && r[0] < 400 ? "" : r[2]);
   });
   app.on("connection", (sock) => sockets.push(sock));
   await new Promise((r) => app.listen(0, "127.0.0.1", r));
@@ -420,4 +421,17 @@ test("validate-guide: a stylesheet link whose type is not text/css is never fetc
   });
   assert.equal(r.code, 0, r.lines.join("\n"));
   assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
+});
+
+// ---------------------------------------------------------------- review round 8
+
+test("validate-guide: a 404 @import inside a sheet reached through a redirect is caught under the URL the browser requested", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("redirect-import", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/a.css">')],
+    "/a.css": [302, "", "/sub/b.css"],
+    "/sub/b.css": [200, "text/css", '@import url("c.css");\n' + TOKENS],
+  });
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: ["/sub/c.css"], unreadable: [], pending: [] });
 });

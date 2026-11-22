@@ -337,3 +337,24 @@ test("check-states: a sheet pending at the first stylesheet read makes every mea
     p.cleanup();
   }
 });
+
+// ---------------------------------------------------------------- review round 8
+
+test("validate-guide --json is not cleared when a value flag before it has no value, and an empty --json is refused naming the flag", async () => {
+  const p = stubDoorProject();
+  const cwd = process.cwd();
+  try {
+    process.chdir(p.dir);
+    fs.writeFileSync(path.join(p.dir, "r.json"), JSON.stringify({ stale: true }));
+    const noRoot = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", "--json", "r.json"], (s) => noRoot.push(s)), 2);
+    assert.equal(noRoot[0].split("\n")[0], "--root needs a value");
+    assert.equal(fs.existsSync(path.join(p.dir, "r.json")), true, "a run that never resolves its report removes nothing");
+    const empty = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", ""], (s) => empty.push(s)), 2);
+    assert.equal(empty[0].split("\n")[0], "--json needs a value");
+  } finally {
+    process.chdir(cwd);
+    p.cleanup();
+  }
+});

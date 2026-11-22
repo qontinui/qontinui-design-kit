@@ -76,8 +76,12 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
     if (depth > 8) return;
     for (const r of Array.from(rules)) {
       if (!(r instanceof CSSImportRule)) continue;
-      let href = r.href;
-      try { href = new URL(r.href, sheet.href || document.baseURI).href; } catch (e) { /* keep as written */ }
+      // The imported sheet's own href is the URL the browser requested; a parent reached through a redirect
+      // keeps its pre-redirect href, so resolving the rule's text against it would miss the timing entry.
+      let href = r.styleSheet && r.styleSheet.href ? r.styleSheet.href : r.href;
+      if (!(r.styleSheet && r.styleSheet.href)) {
+        try { href = new URL(r.href, sheet.href || document.baseURI).href; } catch (e) { /* keep as written */ }
+      }
       const i = seen.get(href);
       if (badResponse(i)) failed.push(href);
       else if (r.styleSheet) walk(r.styleSheet, depth + 1);
