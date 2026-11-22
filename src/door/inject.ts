@@ -49,10 +49,17 @@ export function resolveInjectBin(rootDir: string): { bin: string; instrument: st
   throw new Error("@qontinui/ui-bridge-wrapper is not installed (install it with @qontinui/ui-bridge-headless and run `npx playwright install chromium`)");
 }
 
-export function runDoor(rootDir: string, url: string, steps: DoorStep[], opts: { timeoutMs?: number } = {}): Promise<DoorRun> {
+export interface DoorOptions {
+  timeoutMs?: number;
+  /** A Playwright storageState file, passed as the wrapper's own `--storage-state` (an authed route). */
+  storageState?: string;
+}
+
+export function runDoor(rootDir: string, url: string, steps: DoorStep[], opts: DoorOptions = {}): Promise<DoorRun> {
   const { bin, instrument } = resolveInjectBin(rootDir);
+  const argv = [bin, "--url", url, "--exec-stdin", "--quiet", ...(opts.storageState ? ["--storage-state", opts.storageState] : [])];
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [bin, "--url", url, "--exec-stdin", "--quiet"], { cwd: rootDir, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(process.execPath, argv, { cwd: rootDir, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => child.kill("SIGKILL"), opts.timeoutMs ?? 180_000);

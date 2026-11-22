@@ -170,6 +170,18 @@ function walk(
         break;
     }
 
+    // An undeclared leaf may say why it is unknown; the compile report lists the reason.
+    const reason = ext?.["reason"];
+    if (reason !== undefined) {
+      if (source.kind !== "undeclared") {
+        problems.push(`leaf ${dotted}: reason is carried only by an undeclared leaf (it says why the value is unknown); this leaf is ${source.kind}`);
+      } else if (typeof reason !== "string" || reason.trim() === "") {
+        problems.push(`leaf ${dotted}: reason must be a non-empty string`);
+      } else {
+        inputs = { reason: reason.trim() };
+      }
+    }
+
     if (source.kind === "authored" && isIdentityPath(dotted)) {
       problems.push(
         `leaf ${dotted}: refused. It is an identity value (a hue or chroma anchor, a type family or an imagery style) and cannot be authored(...). ` +

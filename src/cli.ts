@@ -19,8 +19,9 @@ const USAGE = `design-kit <command> [options]
   lint-classes <dir>         find arbitrary-value classes and inline literal colours or lengths in .tsx files
   specimen [--check]         write (or check) specimen.html: every component, variant and state, plus the board
   check-states <url|file>    measure each specimen cell's state through the published exec door; write state-coverage.json
-  validate-guide <guide> <url|file>
-                             run the guide's rules (ui-bridge validateElement) over the page's elements
+  validate-guide <guide> <url|file> [--storage-state <file>] [--json <file>]
+                             run the guide's rules (ui-bridge validateElement) over the page's elements;
+                             a page whose stylesheet did not load is UNKNOWN (exit 3)
   index [--check]            write (or check) the component index between the markers in CLAUDE.md
 
 options
@@ -30,6 +31,12 @@ options
   --base <ref>       git ref to compare against (diff)
   --file <file>      specimen.html (specimen), CLAUDE.md (index), state-coverage.json (check-states), relative to --root
   --kit-dir <dir>    directory holding the kit's .tsx sources or .d.ts declarations (index)
+  --storage-state <file>
+                     a Playwright storageState the door's browser starts from, for an authed route
+                     (validate-guide; passed as the wrapper's own --storage-state), relative to --root
+  --json <file>      write the report as JSON (validate-guide): elements, rules, failures by rule and
+                     element, unmatched rules, stylesheets, instrument, exit code and, on exit 3, the
+                     unknown(...) reason; relative to --root
 
 exit codes: 0 ok, 1 drift or findings, 2 refused or misused, 3 UNKNOWN (the instrument could not measure)
 `;
@@ -44,10 +51,12 @@ interface Args {
   base: string | null;
   file: string | null;
   kitDir: string | null;
+  storageState: string | null;
+  json: string | null;
 }
 
 export function parseArgs(argv: string[]): Args {
-  const a: Args = { command: null, positional: [], check: false, root: process.cwd(), source: "design/language.dtcg.json", out: "src/design", base: null, file: null, kitDir: null };
+  const a: Args = { command: null, positional: [], check: false, root: process.cwd(), source: "design/language.dtcg.json", out: "src/design", base: null, file: null, kitDir: null, storageState: null, json: null };
   let i = 0;
   const value = (flag: string): string => {
     const next = argv[++i];
@@ -63,6 +72,8 @@ export function parseArgs(argv: string[]): Args {
     else if (v === "--base") a.base = value(v);
     else if (v === "--file") a.file = value(v);
     else if (v === "--kit-dir") a.kitDir = value(v);
+    else if (v === "--storage-state") a.storageState = value(v);
+    else if (v === "--json") a.json = value(v);
     else if (v.startsWith("-")) throw new Error(`unknown option ${v}`);
     else if (a.command === null) a.command = v;
     else a.positional.push(v);
@@ -88,6 +99,10 @@ export async function main(argv: string[], out: Out = (s) => process.stdout.writ
     return args.command === null ? 0 : 2;
   }
   const arity: Record<string, number> = { compile: 0, status: 0, diff: 0, specimen: 0, index: 0, "lint-classes": 1, "check-states": 1, "validate-guide": 2 };
+  if ((args.storageState !== null || args.json !== null) && args.command !== "validate-guide") {
+    out(`design-kit: --storage-state and --json apply to validate-guide only\n` + USAGE);
+    return 2;
+  }
   if (args.positional.length > (arity[args.command] ?? 0)) {
     out(`design-kit: unexpected argument ${args.positional[arity[args.command] ?? 0]}\n` + USAGE);
     return 2;
@@ -258,17 +273,49 @@ async function validateGuideCommand(args: Args, out: Out): Promise<number> {
     out("design-kit: validate-guide needs <guide> <url|file>\n" + USAGE);
     return 2;
   }
-  const { validateGuide } = await import("./validate/guide.js");
-  const report = await validateGuide(path.resolve(args.root, guide), target, args.root);
+  let storageState: string | undefined;
+  if (args.storageState !== null) {
+    storageState = path.resolve(args.root, args.storageState);
+    let readable = false;
+    try {
+      fs.accessSync(storageState, fs.constants.R_OK);
+      readable = fs.statSync(storageState).isFile();
+    } catch {
+      readable = false;
+    }
+    if (!readable) {
+      out(`design-kit: --storage-state ${storageState} is not a readable file`);
+      return 2;
+    }
+  }
+  const jsonFile = args.json !== null ? path.resolve(args.root, args.json) : null;
+  const { validateGuide, guideJson, GuideUnknown } = await import("./validate/guide.js");
+  const write = (json: ReturnType<typeof guideJson>): void => {
+    if (jsonFile === null) return;
+    fs.mkdirSync(path.dirname(jsonFile), { recursive: true });
+    fs.writeFileSync(jsonFile, JSON.stringify(json, null, 2) + "\n");
+  };
+  let report;
+  try {
+    report = await validateGuide(path.resolve(args.root, guide), target, args.root, storageState ? { storageState } : {});
+  } catch (e) {
+    // An UNKNOWN still writes its report, with the reason; main() prints it and exits 3.
+    if (e instanceof GuideUnknown) write(guideJson(e.partial, 3, e.message));
+    throw e;
+  }
   const errors = report.failures.filter((f) => f.severity === "error");
   for (const id of report.unmatchedRules) out(`UNMATCHED ${id}: no element on the page answers to this rule`);
   for (const f of report.failures) out(`${f.severity.toUpperCase()} ${f.elementId} ${f.ruleId}: ${f.messages.join("; ")}`);
   out(`design-kit validate-guide: ${report.elements} elements, ${report.rules} rules, ${report.failures.length} failures (${report.instrument})`);
   if (errors.length === 0 && report.rules > 0 && report.unmatchedRules.length === report.rules) {
-    out("design-kit: unknown(no-rule-matched): no rule answered to any element; nothing was evaluated");
+    const why = "unknown(no-rule-matched): no rule answered to any element; nothing was evaluated";
+    write(guideJson(report, 3, why));
+    out(`design-kit: ${why}`);
     return 3;
   }
-  return errors.length > 0 ? 1 : 0;
+  const code = errors.length > 0 ? 1 : 0;
+  write(guideJson(report, code, null));
+  return code;
 }
 
 async function indexCommand(args: Args, out: Out): Promise<number> {

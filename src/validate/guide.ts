@@ -22,6 +22,8 @@ export interface GuideFailure {
 
 export interface GuideReport {
   guide: string;
+  /** The page as given: a URL or a local file. */
+  target: string;
   elements: number;
   rules: number;
   failures: GuideFailure[];
@@ -129,37 +131,110 @@ export async function validateElementsDetailed(
   return { failures, matched };
 }
 
-export async function validateGuide(guideFile: string, target: string, rootDir: string): Promise<GuideReport> {
+/** What a run that stopped at UNKNOWN still knows: null where it never got that far. */
+export interface GuidePartial {
+  guide: string;
+  target: string;
+  rules: number;
+  elements: number | null;
+  stylesheets: StylesheetLoad | null;
+  instrument: string | null;
+}
+
+/** An `unknown(...)` verdict (exit 3) that carries what the run had read when it stopped. */
+export class GuideUnknown extends Error {
+  readonly partial: GuidePartial;
+  constructor(message: string, partial: GuidePartial) {
+    super(message);
+    this.name = "GuideUnknown";
+    this.partial = partial;
+  }
+}
+
+/** What `validate-guide --json` writes: the report, its exit code, and on exit 3 the `unknown(...)` reason. */
+export interface GuideJson {
+  guide: string;
+  target: string;
+  exitCode: 0 | 1 | 3;
+  /** The `unknown(...)` reason on exit 3, else null. */
+  unknown: string | null;
+  elements: number | null;
+  rules: number;
+  failures: GuideFailure[];
+  /** Rule id -> the elements that failed it. */
+  failuresByRule: Record<string, string[]>;
+  unmatchedRules: string[];
+  stylesheets: StylesheetLoad | null;
+  instrument: string | null;
+}
+
+export function guideJson(r: GuideReport | GuidePartial, exitCode: GuideJson["exitCode"], unknown: string | null): GuideJson {
+  const failures = "failures" in r ? r.failures : [];
+  const byRule: Record<string, string[]> = {};
+  for (const id of [...new Set(failures.map((f) => f.ruleId))].sort()) {
+    byRule[id] = [...new Set(failures.filter((f) => f.ruleId === id).map((f) => f.elementId))];
+  }
+  return {
+    guide: r.guide,
+    target: r.target,
+    exitCode,
+    unknown,
+    elements: r.elements,
+    rules: r.rules,
+    failures,
+    failuresByRule: byRule,
+    unmatchedRules: "unmatchedRules" in r ? r.unmatchedRules : [],
+    stylesheets: r.stylesheets,
+    instrument: r.instrument,
+  };
+}
+
+export interface ValidateOptions {
+  /** A Playwright storageState file for the door's browser context (an authed route). */
+  storageState?: string;
+}
+
+export async function validateGuide(guideFile: string, target: string, rootDir: string, opts: ValidateOptions = {}): Promise<GuideReport> {
   const guide = readGuide(guideFile);
   const pairs = pairsOf(guide.rules);
   const page = await openPage(target);
+  const known: GuidePartial = { guide: guideFile, target, rules: guide.rules.length, elements: null, stylesheets: null, instrument: null };
+  const unknown = (message: string): GuideUnknown => new GuideUnknown(message, { ...known });
   try {
-    const run = await runDoor(rootDir, page.url, [
-      { action: "discover", payload: {} },
-      { action: "getDesignSnapshot", payload: { limit: 1000 } },
-      { action: "pageEvaluate", payload: { expression: canonicalizeExpression(pairs) } },
-      { action: "pageEvaluate", payload: { expression: STYLESHEET_LOAD_EXPRESSION } },
-    ]);
+    const run = await runDoor(
+      rootDir,
+      page.url,
+      [
+        { action: "discover", payload: {} },
+        { action: "getDesignSnapshot", payload: { limit: 1000 } },
+        { action: "pageEvaluate", payload: { expression: canonicalizeExpression(pairs) } },
+        { action: "pageEvaluate", payload: { expression: STYLESHEET_LOAD_EXPRESSION } },
+      ],
+      opts.storageState ? { storageState: opts.storageState } : {},
+    );
+    known.instrument = run.instrument;
     const snap = run.lines[1]?.result as { elements?: unknown[]; truncated?: boolean } | undefined;
     const canon = evalValue(run.lines[2]);
     if (!snap?.elements || !Array.isArray(canon)) {
-      throw new Error(`unknown(instrument-cannot-read): ${run.instrument} gave no design snapshot (${run.stderr.slice(0, 160).replace(/\s+/g, " ")})`);
+      throw unknown(`unknown(instrument-cannot-read): ${run.instrument} gave no design snapshot (${run.stderr.slice(0, 160).replace(/\s+/g, " ")})`);
     }
+    known.elements = snap.elements.length;
     // A missing sheet leaves the page on browser defaults: whatever the rules say about it is not about the design.
     const stylesheets = stylesheetLoad(evalValue(run.lines[3]), page.url, page.missed());
-    if (!stylesheets) throw new Error(`unknown(instrument-cannot-read): ${run.instrument} did not answer the stylesheet-load check`);
+    if (!stylesheets) throw unknown(`unknown(instrument-cannot-read): ${run.instrument} did not answer the stylesheet-load check`);
+    known.stylesheets = stylesheets;
     if (stylesheets.failed.length > 0) {
-      throw new Error(`${stylesheetMissing(stylesheets.failed)}; a guide evaluated without its stylesheets reads browser defaults, not the page`);
+      throw unknown(`${stylesheetMissing(stylesheets.failed)}; a guide evaluated without its stylesheets reads browser defaults, not the page`);
     }
-    if (snap.elements.length === 0) throw new Error("unknown(no-elements): the page returned no registered elements; a guide that read nothing is not a pass");
-    if (snap.truncated) throw new Error("unknown(snapshot-truncated): the page has more elements than one snapshot returns");
-    if (canon.length !== pairs.length) throw new Error("unknown(instrument-cannot-read): the canonicalisation answered a different number of values than asked");
+    if (snap.elements.length === 0) throw unknown("unknown(no-elements): the page returned no registered elements; a guide that read nothing is not a pass");
+    if (snap.truncated) throw unknown("unknown(snapshot-truncated): the page has more elements than one snapshot returns");
+    if (canon.length !== pairs.length) throw unknown("unknown(instrument-cannot-read): the canonicalisation answered a different number of values than asked");
     const map = new Map<string, string>();
     pairs.forEach(([p, v], i) => map.set(`${p}\0${v}`, String(canon[i])));
     const rules = applyCanonical(guide.rules, map);
     const { failures, matched } = await validateElementsDetailed(guide, rules, snap.elements);
     const unmatchedRules = rules.map((r) => r.id).filter((id) => !matched.has(id));
-    return { guide: guideFile, elements: snap.elements.length, rules: rules.length, failures, unmatchedRules, stylesheets, instrument: run.instrument };
+    return { guide: guideFile, target, elements: snap.elements.length, rules: rules.length, failures, unmatchedRules, stylesheets, instrument: run.instrument };
   } finally {
     await page.close();
   }
