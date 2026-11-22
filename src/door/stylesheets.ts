@@ -133,10 +133,11 @@ export function stylesheetLoad(pageValue: unknown, pageUrl: string, missed: read
     origin = null;
   }
   // The server records the decoded request path; name a same-origin sheet the same way so the two signals agree.
+  // Another origin's sheet is named by origin and path: a signed URL's query stays out of logs and the report.
   const sheetPath = (href: string): string => {
     try {
       const u = new URL(href);
-      if (u.origin !== origin) return href;
+      if (u.origin !== origin) return u.origin + u.pathname;
       try {
         return decodeURIComponent(u.pathname);
       } catch {

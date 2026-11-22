@@ -688,3 +688,34 @@ test("validate-guide: a file target whose name the browser escapes (a pipe chara
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------- review round 25
+
+test("validate-guide: an @import that 404'd on a URL target whose page cleared its resource timing is pending (exit 3), not loaded", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("cleared-url-import", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/importer.css">', '<script>addEventListener("load", () => performance.clearResourceTimings());</script>')],
+    "/importer.css": [200, "text/css", '@import url("/missing-import.css");\n' + TOKENS],
+  });
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: ["/missing-import.css"] });
+});
+
+test("validate-guide: a cross-origin sheet is named by origin and path, so a signature in its query stays out of the reason and the report", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const other = http.createServer((req, res) => {
+    res.setHeader("content-type", "text/css");
+    res.end(TOKENS);
+  });
+  await new Promise((r) => other.listen(0, "127.0.0.1", r));
+  const origin = `http://127.0.0.1:${other.address().port}`;
+  try {
+    const r = await validateUrl("xo-query", { "/route": [200, "text/html", head(`<link rel="stylesheet" href="${origin}/app.css?sig=SECRET">`)] });
+    assert.equal(r.code, 3);
+    assert.equal(r.lines.join("\n").includes("SECRET"), false, r.lines.join("\n"));
+    assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [`${origin}/app.css`], pending: [] });
+  } finally {
+    other.closeAllConnections();
+    await new Promise((r) => other.close(r));
+  }
+});
