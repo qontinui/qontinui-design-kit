@@ -96,7 +96,7 @@ test("validate-guide: a page whose linked tokens.css 404s exits 3 naming it; wit
     fs.writeFileSync(path.join(dir, "tokens.css"), ":root { --dk-text: #111111; }\n");
     const present = [];
     assert.equal(await main(["validate-guide", guide, page, "--root", ROOT, "--json", json], (s) => present.push(s)), 0);
-    assert.match(present.at(-1), /^design-kit validate-guide: \d+ elements, 1 rules, 0 failures \(@qontinui\/ui-bridge-wrapper@0\.12\.0\)$/);
+    assert.equal(present.at(-1), "design-kit validate-guide: 2 elements, 1 rules, 0 failures (@qontinui/ui-bridge-wrapper@0.12.0)");
     const report = JSON.parse(fs.readFileSync(json, "utf8"));
     assert.deepEqual([report.exitCode, report.unknown, report.stylesheets], [0, null, { requested: 1, failed: [], unreadable: [], pending: [] }]);
   } finally {

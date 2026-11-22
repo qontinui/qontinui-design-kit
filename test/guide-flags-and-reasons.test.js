@@ -4,6 +4,7 @@
 // exit 0, 1 and 3). Every expectation is a literal.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFile, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { compileSource, parseSource, SourceError } from "../dist/index.js";
@@ -222,7 +223,7 @@ test("validate-guide --json: an argument refused at parse time leaves no earlier
 
     const lines = [];
     assert.equal(await main(["validate-guide", "guide.json", "t.html", "--root", p.dir, "--json", "out"], (s) => lines.push(s)), 2);
-    assert.match(lines[0], /^design-kit: --json .*[\\/]out cannot be replaced: /);
+    assert.deepEqual(lines, [`design-kit: --json ${path.join(p.dir, "out")} cannot be replaced: it is a directory`]);
     assert.equal(fs.statSync(path.join(p.dir, "out")).isDirectory(), true);
 
     const guide = [];
@@ -343,7 +344,7 @@ test("check-states: a sheet pending at the first stylesheet read makes every mea
 
 // ---------------------------------------------------------------- review round 8
 
-test("validate-guide --json is not cleared when a value flag before it has no value, and an empty --json is refused naming the flag", async () => {
+test("validate-guide: a valueless or empty --root or --json clears nothing, and an empty --json is refused naming the flag", async () => {
   const p = stubDoorProject();
   const cwd = process.cwd();
   try {
@@ -382,7 +383,7 @@ test("validate-guide: a --json report that cannot be written still prints the ve
     const lines = [];
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "ro/r.json"], (s) => lines.push(s)), 2);
     assert.deepEqual(lines[0], "design-kit: unknown(instrument-cannot-read): @qontinui/ui-bridge-wrapper@9.9.9 gave no design snapshot ()");
-    assert.match(lines[1], /^design-kit: --json .*[\\/]ro[\\/]r\.json could not be written: EACCES/);
+    assert.ok(lines[1].startsWith(`design-kit: --json ${path.join(ro, "r.json")} could not be written: EACCES`), lines[1]);
     assert.equal(lines.length, 2);
   } finally {
     fs.chmodSync(ro, 0o755);
@@ -556,6 +557,54 @@ test("validate-guide --json naming a file that is not an earlier report (a page,
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "other.json"], (s) => second.push(s)), 2);
     assert.deepEqual(second, [`design-kit: --json ${other} is not an earlier validate-guide report (a JSON object with schema 1 and a numeric exitCode); refusing to overwrite it`]);
     assert.equal(fs.readFileSync(other, "utf8"), '{"exitCode":0}');
+  } finally {
+    p.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- review round 18
+
+const BIN = path.join(ROOT, "dist", "cli.js");
+
+test("validate-guide --json naming a FIFO is not read, so it cannot hold the run: the report is written into the pipe", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("no mkfifo on Windows");
+    return;
+  }
+  const p = stubDoorProject();
+  const fifo = path.join(p.dir, "report.fifo");
+  execFileSync("mkfifo", [fifo]);
+  const reader = fs.promises.readFile(fifo, "utf8");
+  try {
+    const run = await new Promise((resolve) => {
+      execFile(process.execPath, [BIN, "validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", fifo], { timeout: 15000 }, (error, stdout) =>
+        resolve({ code: error ? (error.code ?? error.signal) : 0, stdout }),
+      );
+    });
+    assert.deepEqual(run, { code: 3, stdout: "design-kit: unknown(instrument-cannot-read): @qontinui/ui-bridge-wrapper@9.9.9 gave no design snapshot ()\n" });
+    assert.equal(JSON.parse(await reader).exitCode, 3);
+  } finally {
+    // Release the reader if the run never opened the pipe for writing.
+    try {
+      fs.closeSync(fs.openSync(fifo, fs.constants.O_WRONLY | fs.constants.O_NONBLOCK));
+    } catch {
+      // no reader left waiting
+    }
+    await reader.catch(() => undefined);
+    p.cleanup();
+  }
+});
+
+test("validate-guide --json naming an empty file or /dev/null clears nothing and runs: neither holds an earlier verdict", async () => {
+  const p = stubDoorProject();
+  try {
+    const empty = path.join(p.dir, "empty.json");
+    fs.writeFileSync(empty, "");
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "empty.json"], () => undefined), 3);
+    assert.equal(JSON.parse(fs.readFileSync(empty, "utf8")).exitCode, 3);
+    if (process.platform !== "win32") {
+      assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "/dev/null"], () => undefined), 3);
+    }
   } finally {
     p.cleanup();
   }

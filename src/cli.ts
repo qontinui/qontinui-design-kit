@@ -134,10 +134,11 @@ const VALUE_FLAGS: ReadonlySet<string> = new Set(Object.keys(VALUE_OPTIONS));
  * previous verdict standing at that path. It reads the raw argv for that reason.
  * Two argvs name no report it could resolve and clear nothing: one with a word
  * before `validate-guide`, and one whose `--root` or `--json` has no value. Only
- * an earlier report is removed: a path that names any word of the command line
- * (the guide, a file target, the storage state), any other file that is not a
- * report, or one that cannot be removed (a directory), is refused with exit 2
- * and left as it is. Returns the exit code to stop with, or null to go on.
+ * an earlier report is removed: a path that names the guide, a file target, the
+ * storage state or any other bare word, any other file that is not a report, or
+ * a directory, is refused with exit 2 and left as it is. A path that is not a
+ * regular file (a pipe, /dev/null) or is empty is left for the report to be
+ * written into. Returns the exit code to stop with, or null to go on.
  */
 function clearJsonReport(argv: string[], out: Out): number | null {
   let root = process.cwd();
@@ -175,12 +176,26 @@ function clearJsonReport(argv: string[], out: Out): number | null {
     return 2;
   }
   // Only an earlier report is removed. Any other file there (a page, another tool's JSON, a path
-  // `--json` took when read as a switch) is refused and kept, whatever shape the argv has.
+  // `--json` took when read as a switch) is refused and kept, whatever shape the argv has. A path that
+  // is not a regular file (a pipe, /dev/null) or is empty holds no verdict: it is not read, so a FIFO
+  // cannot hold the run, and the report is written into it.
+  let st: fs.Stats;
+  try {
+    st = fs.statSync(file);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    out(`design-kit: --json ${file} cannot be replaced: ${(e as Error).message}`);
+    return 2;
+  }
+  if (st.isDirectory()) {
+    out(`design-kit: --json ${file} cannot be replaced: it is a directory`);
+    return 2;
+  }
+  if (!st.isFile() || st.size === 0) return null;
   let text: string;
   try {
     text = fs.readFileSync(file, "utf8");
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     out(`design-kit: --json ${file} cannot be replaced: ${(e as Error).message}`);
     return 2;
   }
