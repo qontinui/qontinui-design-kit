@@ -402,3 +402,22 @@ test("validate-guide --json naming the page file target is refused as an input, 
     p.cleanup();
   }
 });
+
+// ---------------------------------------------------------------- review round 13
+
+test("validate-guide: a mistyped option before the guide does not let --json naming the guide delete it", async () => {
+  const p = stubDoorProject();
+  const cwd = process.cwd();
+  const elsewhere = tmpDir("elsewhere");
+  try {
+    process.chdir(elsewhere);
+    const lines = [];
+    assert.equal(await main(["validate-guide", "--storage-sate", "state.json", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "guide.json"], (s) => lines.push(s)), 2);
+    assert.deepEqual(lines, [`design-kit: --json ${path.join(p.dir, "guide.json")} is one of validate-guide's inputs; refusing to overwrite it`]);
+    assert.equal(fs.existsSync(path.join(p.dir, "guide.json")), true);
+  } finally {
+    process.chdir(cwd);
+    fs.rmSync(elsewhere, { recursive: true, force: true });
+    p.cleanup();
+  }
+});

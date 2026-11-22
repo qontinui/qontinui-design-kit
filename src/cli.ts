@@ -93,7 +93,7 @@ const COMMANDS = ["compile", "status", "diff", "lint-classes", "specimen", "chec
 function samePath(a: string, b: string): boolean {
   if (a === b) return true;
   try {
-    // bigint: a 64-bit file id (NTFS) loses its low bits as a Number.
+    // bigint: a file id above 2^53 loses its low bits as a Number.
     const x = fs.statSync(a, { bigint: true });
     const y = fs.statSync(b, { bigint: true });
     return x.dev === y.dev && x.ino === y.ino;
@@ -143,12 +143,13 @@ function clearJsonReport(argv: string[], out: Out): number | null {
   }
   if (positional[0] !== "validate-guide" || json === null) return null;
   const file = path.resolve(root, json);
-  const [, guide, target] = positional;
-  const inputs = [
-    guide ? path.resolve(root, guide) : null,
-    target && !isUrlTarget(target) ? path.resolve(target) : null,
-    storageState ? path.resolve(root, storageState) : null,
-  ].filter((f): f is string => f !== null);
+  // Every bare word may be an input: a mistyped option's value shifts the guide and the target along,
+  // so each word is checked, resolved against --root (the guide's base) and the cwd (a file target's).
+  const inputs = positional
+    .slice(1)
+    .filter((w) => !isUrlTarget(w))
+    .flatMap((w) => [path.resolve(root, w), path.resolve(w)]);
+  if (storageState) inputs.push(path.resolve(root, storageState));
   if (inputs.some((f) => samePath(f, file))) {
     out(`design-kit: --json ${file} is one of validate-guide's inputs; refusing to overwrite it`);
     return 2;

@@ -21,11 +21,13 @@ test("canonical keeps an em length as written and converts only rem at the 16px 
 });
 
 const get = (url) =>
-  new Promise((resolve) => {
-    http.get(url, (res) => {
-      res.resume();
-      res.on("end", () => resolve(res.statusCode));
-    });
+  new Promise((resolve, reject) => {
+    http
+      .get(url, (res) => {
+        res.resume();
+        res.on("end", () => resolve(res.statusCode));
+      })
+      .on("error", reject);
   });
 
 test("the page server records a stylesheet 404 and nothing else; openPage forwards it", async () => {
@@ -485,4 +487,17 @@ test("a breakpoint the guide cannot state is a refused source for every compile-
   } finally {
     p.cleanup();
   }
+});
+
+// ---------------------------------------------------------------- review round 13
+
+test("validate-guide: a linked sheet that 404s as text/css on a URL target did not load (the status, not the type, catches it)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("css404", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/gone.css">')],
+    "/tokens.css": [200, "text/css", TOKENS],
+    "/gone.css": [404, "text/css", "/* not here */"],
+  });
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.report.stylesheets, { requested: 2, failed: ["/gone.css"], unreadable: [], pending: [] });
 });
