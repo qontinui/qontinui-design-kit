@@ -56,7 +56,10 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
   const unreadable = [];
   const links = Array.from(document.querySelectorAll('link[rel~="stylesheet" i]')).filter((l) => !l.disabled);
   for (const l of links) {
-    const href = l.href || l.getAttribute('href') || '<link with no href>';
+    // An empty href resolves to the page itself and never loads: a sheet that did not load, not one still loading.
+    const raw = l.getAttribute('href');
+    if (raw === null || raw.trim() === '') { failed.push('<link with no href>'); continue; }
+    const href = l.href;
     const i = seen.get(l.href);
     if (badResponse(i)) failed.push(href);
     else if (!l.sheet) (i === undefined || i.code === 0 ? pending : failed).push(href);

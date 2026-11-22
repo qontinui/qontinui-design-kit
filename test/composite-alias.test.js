@@ -175,3 +175,18 @@ test("a two-hop untyped whole-value alias to a shadow compiles as that shadow", 
   );
   assert.match(outputs["tokens.css"], /^ {2}--dk-space-depth-a: 0px 0px 12px 0px var\(--dk-color-glow-primary\);$/m);
 });
+
+// ---------------------------------------------------------------- review round 4
+
+test("a shadow field alias naming a broken untyped alias is refused for the break, whatever the source order", async () => {
+  const shadow = leaf("shadow", { offsetX: px(0), offsetY: px(0), blur: px(12), color: "{color.a}" }, "authored(finding-glow)");
+  const colors = { a: leaf(undefined, "{color.missing}", "declared") };
+  for (const source of [
+    { $extensions: { qontinui: { name: "fixture" } }, space: { depth: { glow: shadow } }, color: colors },
+    { $extensions: { qontinui: { name: "fixture" } }, color: colors, space: { depth: { glow: shadow } } },
+  ]) {
+    const r = await cli(source);
+    assert.equal(r.code, 2);
+    assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf color.a: alias {color.missing} names no leaf"]);
+  }
+});

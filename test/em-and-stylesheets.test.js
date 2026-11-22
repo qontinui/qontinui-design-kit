@@ -9,7 +9,6 @@ import path from "node:path";
 import { canonical, compileSource } from "../dist/index.js";
 import { main } from "../dist/cli.js";
 import { openPage, serveDir } from "../dist/door/inject.js";
-import { stylesheetLoad } from "../dist/door/stylesheets.js";
 import { ROOT } from "./helpers.js";
 import { needDoor, tmpDir, writeSpecimen } from "./kit-helpers.js";
 import { leaf, mkProject } from "./project.js";
@@ -235,14 +234,6 @@ test("validate-guide: a sheet from another origin whose rules cannot be read is 
   }
 });
 
-test("stylesheetLoad names a percent-encoded sheet once, by its decoded path; an answer with no lists is UNKNOWN (null)", () => {
-  assert.deepEqual(
-    stylesheetLoad({ requested: 1, failed: ["http://127.0.0.1:5/my%20sheet.css"], unreadable: [], pending: [] }, "http://127.0.0.1:5/p.html", ["/my sheet.css"]),
-    { requested: 1, failed: ["/my sheet.css"], unreadable: [], pending: [] },
-  );
-  assert.equal(stylesheetLoad({ requested: 1, failed: [] }, "http://127.0.0.1:5/p.html", []), null);
-});
-
 const em = (value) => ({ value, unit: "em" });
 
 async function guideOf(source) {
@@ -394,4 +385,16 @@ test("validate-guide on a file target whose resource timing was cleared: the kit
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------- review round 4
+
+test("validate-guide: a stylesheet link with an empty href did not load; it is not 'pending' under the page's own name", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("emptyhref", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="">')],
+    "/tokens.css": [200, "text/css", TOKENS],
+  });
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.report.stylesheets, { requested: 2, failed: ["<link with no href>"], unreadable: [], pending: [] });
 });

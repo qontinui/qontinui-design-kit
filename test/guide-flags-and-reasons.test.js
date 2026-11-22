@@ -196,3 +196,26 @@ test("validate-guide runs refused for a missing target or an extra argument leav
     p.cleanup();
   }
 });
+
+test("validate-guide --json: an argument refused at parse time leaves no earlier report; a directory or an input path is refused (exit 2) and left intact", async () => {
+  const p = stubDoorProject();
+  try {
+    const out = path.join(p.dir, "out", "report.json");
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, JSON.stringify({ exitCode: 0, stale: true }));
+    assert.equal(await main(["validate-guide", "guide.json", "t.html", "--root", p.dir, "--json", "out/report.json", "--bogus"], () => undefined), 2);
+    assert.equal(fs.existsSync(out), false, "unknown option");
+
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "t.html", "--root", p.dir, "--json", "out"], (s) => lines.push(s)), 2);
+    assert.match(lines[0], /^design-kit: --json .*\/out cannot be replaced: /);
+    assert.equal(fs.statSync(path.join(p.dir, "out")).isDirectory(), true);
+
+    const guide = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "guide.json"], (s) => guide.push(s)), 2);
+    assert.deepEqual(guide, [`design-kit: --json ${path.join(p.dir, "guide.json")} is one of validate-guide's inputs; refusing to overwrite it`]);
+    assert.equal(fs.existsSync(path.join(p.dir, "guide.json")), true);
+  } finally {
+    p.cleanup();
+  }
+});

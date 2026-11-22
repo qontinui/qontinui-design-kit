@@ -86,8 +86,53 @@ type Out = (s: string) => void;
 
 const COMMANDS = ["compile", "status", "diff", "lint-classes", "specimen", "check-states", "validate-guide", "index"];
 
+/** The options that take a value, so a scan of the raw argv can tell a value from a positional argument. */
+const VALUE_FLAGS = new Set(["--root", "--source", "--out", "--base", "--file", "--kit-dir", "--storage-state", "--json"]);
+
+/**
+ * `validate-guide --json <file>`: remove an earlier report before anything can
+ * refuse the run (exit 2), argument parsing included, so a refused run never
+ * leaves a previous verdict standing at that path. It reads the raw argv for
+ * that reason. A path that is one of the run's inputs (the guide, a file
+ * target), or that cannot be removed (a directory), is refused with exit 2 and
+ * left as it is. Returns the exit code to stop with, or null to go on.
+ */
+function clearJsonReport(argv: string[], out: Out): number | null {
+  let root = process.cwd();
+  let json: string | null = null;
+  const positional: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const v = argv[i] as string;
+    if (VALUE_FLAGS.has(v)) {
+      const next = argv[i + 1];
+      if (next !== undefined && next !== "" && !next.startsWith("--")) {
+        if (v === "--root") root = path.resolve(next);
+        if (v === "--json") json = next;
+        i++;
+      }
+    } else if (!v.startsWith("-")) positional.push(v);
+  }
+  if (positional[0] !== "validate-guide" || json === null) return null;
+  const file = path.resolve(root, json);
+  const [, guide, target] = positional;
+  const inputs = [guide ? path.resolve(root, guide) : null, target && !/^https?:\/\//.test(target) ? path.resolve(target) : null];
+  if (inputs.includes(file)) {
+    out(`design-kit: --json ${file} is one of validate-guide's inputs; refusing to overwrite it`);
+    return 2;
+  }
+  try {
+    fs.rmSync(file, { force: true });
+  } catch (e) {
+    out(`design-kit: --json ${file} cannot be replaced: ${(e as Error).message}`);
+    return 2;
+  }
+  return null;
+}
+
 /** Runs the CLI and returns the exit code (see USAGE). */
 export async function main(argv: string[], out: Out = (s) => process.stdout.write(s + "\n")): Promise<number> {
+  const cleared = clearJsonReport(argv, out);
+  if (cleared !== null) return cleared;
   let args: Args;
   try {
     args = parseArgs(argv);
@@ -100,9 +145,6 @@ export async function main(argv: string[], out: Out = (s) => process.stdout.writ
     return args.command === null ? 0 : 2;
   }
   const arity: Record<string, number> = { compile: 0, status: 0, diff: 0, specimen: 0, index: 0, "lint-classes": 1, "check-states": 1, "validate-guide": 2 };
-  // A refused run (exit 2) must not leave an earlier run's report standing as if it were this one's,
-  // so the report path is cleared before any refusal, the usage checks below included.
-  if (args.command === "validate-guide" && args.json !== null) fs.rmSync(path.resolve(args.root, args.json), { force: true });
   if ((args.storageState !== null || args.json !== null) && args.command !== "validate-guide") {
     out(`design-kit: --storage-state and --json apply to validate-guide only\n` + USAGE);
     return 2;
