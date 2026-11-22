@@ -26,7 +26,8 @@
  *   looks exactly like it. That is UNKNOWN, not a load failure. An `@import`
  *   naming a sheet above it (a cycle, which the browser does not follow), or
  *   one whose `supports()` condition is false (fetched, never applied, whatever
- *   its response), has no sheet by design and is not counted;
+ *   its response), has no sheet by design and is not counted here (on a file
+ *   target the kit's server still records any `.css` 404);
  * - a `.css` a `<link>` requested whose response timing reports bad (a preload
  *   whose `onload` never swapped its `rel`, a link removed on error) did not
  *   load, though no stylesheet link names it, as the kit's server records for a
