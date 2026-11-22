@@ -65,7 +65,7 @@ function hasValue(next: string | undefined): next is string {
 export function parseArgs(argv: string[]): Args {
   const a: Args = { command: null, positional: [], check: false, root: process.cwd(), source: "design/language.dtcg.json", out: "src/design", base: null, file: null, kitDir: null, storageState: null, json: null };
   let i = 0;
-  const value = (flag: string): string => {
+  const flagValue = (flag: string): string => {
     const next = argv[++i];
     if (!hasValue(next)) throw new Error(`${flag} needs a value`);
     return next;
@@ -75,7 +75,7 @@ export function parseArgs(argv: string[]): Args {
     if (v === "--check") a.check = true;
     else if (Object.hasOwn(VALUE_OPTIONS, v)) {
       const key = VALUE_OPTIONS[v as keyof typeof VALUE_OPTIONS];
-      const given = value(v);
+      const given = flagValue(v);
       if (key === "root") a.root = path.resolve(given);
       else a[key] = given;
     } else if (v.startsWith("-")) throw new Error(`unknown option ${v}`);
