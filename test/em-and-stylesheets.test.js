@@ -9,8 +9,6 @@ import path from "node:path";
 import { canonical } from "../dist/index.js";
 import { main } from "../dist/cli.js";
 import { openPage, serveDir } from "../dist/door/inject.js";
-import { checkStates } from "../dist/specimen/check-states.js";
-import { validateGuide } from "../dist/validate/guide.js";
 import { ROOT } from "./helpers.js";
 import { needDoor, tmpDir, writeSpecimen } from "./kit-helpers.js";
 
@@ -83,18 +81,21 @@ test("validate-guide: a page whose linked tokens.css 404s exits 3 naming it; wit
     fs.writeFileSync(guide, JSON.stringify(GUIDE));
     fs.writeFileSync(page, PAGE);
 
+    const json = path.join(dir, "report.json");
     const missing = [];
-    assert.equal(await main(["validate-guide", guide, page, "--root", ROOT], (s) => missing.push(s)), 3);
+    assert.equal(await main(["validate-guide", guide, page, "--root", ROOT, "--json", json], (s) => missing.push(s)), 3);
     assert.deepEqual(missing, [
       "design-kit: unknown(stylesheet-missing): /tokens.css did not load; a guide evaluated without its stylesheets reads browser defaults, not the page",
     ]);
+    const unknown = JSON.parse(fs.readFileSync(json, "utf8"));
+    assert.deepEqual([unknown.exitCode, unknown.stylesheets], [3, { requested: 1, failed: ["/tokens.css"] }]);
 
     fs.writeFileSync(path.join(dir, "tokens.css"), ":root { --dk-text: #111111; }\n");
     const present = [];
-    assert.equal(await main(["validate-guide", guide, page, "--root", ROOT], (s) => present.push(s)), 0);
+    assert.equal(await main(["validate-guide", guide, page, "--root", ROOT, "--json", json], (s) => present.push(s)), 0);
     assert.match(present.at(-1), /^design-kit validate-guide: \d+ elements, 1 rules, 0 failures \(@qontinui\/ui-bridge-wrapper@0\.12\.0\)$/);
-    const report = await validateGuide(guide, page, ROOT);
-    assert.deepEqual(report.stylesheets, { requested: 1, failed: [] });
+    const report = JSON.parse(fs.readFileSync(json, "utf8"));
+    assert.deepEqual([report.exitCode, report.unknown, report.stylesheets], [0, null, { requested: 1, failed: [] }]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -111,19 +112,26 @@ async function specimenWithoutInlineTokens(name, { link }) {
 
 const nonBaseline = (cov) => cov.cells.filter((c) => c.status !== "baseline" && c.state !== "focus-visible");
 
+/** Run `design-kit check-states` the way a consumer does, and read the coverage it wrote. */
+async function runCheckStates(sp) {
+  const file = path.join(sp.dir, "state-coverage.json");
+  const lines = [];
+  const code = await main(["check-states", sp.file, "--root", ROOT, "--file", path.relative(ROOT, file)], (s) => lines.push(s));
+  return { code, lines, cov: JSON.parse(fs.readFileSync(file, "utf8")) };
+}
+
 test("check-states: a specimen whose linked token sheet 404s is unknown, never measured, and the CLI exits 3", async (t) => {
   if (!(await needDoor(t, assert))) return;
   const sp = await specimenWithoutInlineTokens("sheet-missing", { link: true });
   try {
-    const cov = await checkStates(sp.file, ROOT);
+    const { code, lines, cov } = await runCheckStates(sp);
+    assert.equal(code, 3);
     assert.equal(cov.summary.measured, 0);
     assert.deepEqual(cov.stylesheets, { requested: 1, failed: ["/tokens.css"] });
     assert.equal(nonBaseline(cov).length, 36);
     for (const c of nonBaseline(cov)) assert.equal(c.unknown, "unknown(stylesheet-missing): /tokens.css did not load", c.id);
-    const lines = [];
-    const code = await main(["check-states", sp.file, "--root", ROOT, "--file", path.relative(ROOT, path.join(sp.dir, "state-coverage.json"))], (s) => lines.push(s));
-    assert.equal(code, 3);
     assert.match(lines.join("\n"), /unknown\(stylesheet-missing\): \/tokens\.css did not load/);
+    assert.equal(lines.at(-1), "design-kit: unknown(nothing-measured): no cell was measured");
   } finally {
     sp.cleanup();
   }
@@ -133,7 +141,8 @@ test("check-states: the kit's own --dk-kit-states does not make a page with no t
   if (!(await needDoor(t, assert))) return;
   const sp = await specimenWithoutInlineTokens("no-tokens", { link: false });
   try {
-    const cov = await checkStates(sp.file, ROOT);
+    const { code, cov } = await runCheckStates(sp);
+    assert.equal(code, 3);
     assert.equal(cov.summary.measured, 0);
     assert.deepEqual(cov.stylesheets, { requested: 0, failed: [] });
     for (const c of nonBaseline(cov)) assert.equal(c.unknown, "unknown(no-token-values): the page declares no --dk-* custom property other than --dk-kit-states", c.id);
@@ -147,7 +156,8 @@ test("check-states: the same specimen with its linked token sheet present is mea
   const sp = await specimenWithoutInlineTokens("sheet-present", { link: true });
   try {
     fs.writeFileSync(path.join(sp.dir, "tokens.css"), sp.outputs["tokens.css"]);
-    const cov = await checkStates(sp.file, ROOT);
+    const { code, cov } = await runCheckStates(sp);
+    assert.equal(code, 0);
     assert.deepEqual(cov.summary, { cells: 56, measured: 36, baseline: 10, unknown: 10, findings: 0 });
     assert.deepEqual(cov.stylesheets, { requested: 1, failed: [] });
   } finally {
