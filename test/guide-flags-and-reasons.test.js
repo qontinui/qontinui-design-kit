@@ -455,7 +455,8 @@ test("validate-guide: a page the door ended on another path of (a login redirect
     p.answer([sheets([]), { action: "discover", result: {} }, SNAPSHOT, evaluated(["rgb(17, 17, 17)"]), sheets([]), evaluated("http://127.0.0.1:9/login?next=%2Fapp")]);
     const lines = [];
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/app", "--root", p.dir, "--storage-state", "state.json", "--json", "r.json"], (s) => lines.push(s)), 3);
-    const why = "unknown(redirected): http://127.0.0.1:9/app was answered by http://127.0.0.1:9/login?next=%2Fapp; a verdict there is not a verdict on the target";
+    // Only the origin and path are named: a query or fragment (a callback's code or token) stays out of logs and reports.
+    const why = "unknown(redirected): http://127.0.0.1:9/app was answered by http://127.0.0.1:9/login; a verdict there is not a verdict on the target";
     assert.deepEqual(lines, [`design-kit: ${why}`]);
     const r = JSON.parse(fs.readFileSync(path.join(p.dir, "r.json"), "utf8"));
     // The elements read were the login page's, not the target's: the count is null, not theirs.
@@ -566,7 +567,7 @@ test("validate-guide --json naming a file that is not an earlier report (a page,
 
 const BIN = path.join(ROOT, "dist", "cli.js");
 
-test("validate-guide --json naming a FIFO is not read, so it cannot hold the run: the report is written into the pipe", async (t) => {
+test("validate-guide --json naming a FIFO is not read before the run; with a reader, the report is written into the pipe", async (t) => {
   if (process.platform === "win32") {
     t.skip("no mkfifo on Windows");
     return;

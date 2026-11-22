@@ -222,7 +222,8 @@ function clearJsonReport(argv: string[], out: Out): number | null {
     return refuseJson("is this run's own stdout, which carries the verdict; refusing to write the report there");
   }
   if (st.isDirectory()) return refuseJson("cannot be replaced: it is a directory");
-  // A pipe or a device holds no verdict and is never read, so a FIFO cannot hold the run; nor does an empty file.
+  // A pipe or a device holds no verdict and is never read before the run; nor is an empty file. The report is
+  // written into it after the verdict, so a FIFO needs a reader: without one the run waits there.
   if (!st.isFile() || st.size === BigInt(0)) return null;
   let text: string;
   try {

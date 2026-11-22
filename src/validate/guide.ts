@@ -211,6 +211,16 @@ function samePage(requested: string, read: string): boolean {
   }
 }
 
+/** A page's origin and path: the part `samePage` compares, and all a reason names (a query or fragment may carry a code or token). */
+function pageOf(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.origin + u.pathname;
+  } catch {
+    return url;
+  }
+}
+
 export interface ValidateOptions {
   /** A Playwright storageState file for the door's browser context (an authed route). */
   storageState?: string;
@@ -247,7 +257,7 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
     const readUrl = evalValue(run.lines[5]);
     if (typeof readUrl !== "string") throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} did not say which page it read`);
     if (!samePage(page.url, readUrl)) {
-      throw unknownVerdict(`unknown(redirected): ${target} was answered by ${readUrl}; a verdict there is not a verdict on the target`);
+      throw unknownVerdict(`unknown(redirected): ${target} was answered by ${pageOf(readUrl)}; a verdict there is not a verdict on the target`);
     }
     // The count is the target's only once the page is the target and the snapshot is whole; a truncated one is a floor.
     if (!snap.truncated) known.elements = snap.elements.length;
