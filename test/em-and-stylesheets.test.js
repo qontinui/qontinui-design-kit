@@ -277,7 +277,7 @@ test("an em type scale's heading rule still excludes the body step", async () =>
 
 /** A page server with fixed routes (`path -> [status, type, body]`); `/slow.css` never answers until close. */
 async function routes(map) {
-  const open = new Set();
+  const sockets = [];
   const app = http.createServer((req, res) => {
     if (req.url === "/slow.css") return; // held open: the request never gets a response
     const r = map[req.url] ?? [404, "text/html", "<!doctype html><h1>404</h1>"];
@@ -285,15 +285,12 @@ async function routes(map) {
     res.setHeader("content-type", r[1]);
     res.end(r[2]);
   });
-  app.on("connection", (sock) => {
-    open.add(sock);
-    sock.on("close", () => open.delete(sock));
-  });
+  app.on("connection", (sock) => sockets.push(sock));
   await new Promise((r) => app.listen(0, "127.0.0.1", r));
   return {
     url: `http://127.0.0.1:${app.address().port}`,
     close: () => new Promise((r) => {
-      for (const sock of open) sock.destroy();
+      for (const sock of sockets) sock.destroy();
       app.close(r);
     }),
   };
