@@ -6,6 +6,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { npmLauncher } from "../dist/adapters/npm.js";
 
 const NODE = "C:\\Program Files\\nodejs\\node.exe";
@@ -16,14 +18,15 @@ const GLOBAL = "C:\\Users\\u\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm
 
 const only = (...present) => (p) => present.includes(p);
 const noPrefix = () => null;
-const prefixAt = (dir) => (node, js) => {
+const prefixAt = (dir) => (node, js, cwd) => {
   assert.equal(node, NODE);
   assert.equal(js, PREFIX_JS);
+  assert.equal(cwd, "C:\\work");
   return dir;
 };
 
 test("on Windows, a globally upgraded npm under npm's prefix wins, as npm.cmd does", () => {
-  assert.deepEqual(npmLauncher("win32", {}, NODE, only(PREFIX_JS, BESIDE, GLOBAL), prefixAt("C:\\Users\\u\\AppData\\Roaming\\npm")), {
+  assert.deepEqual(npmLauncher("win32", {}, NODE, only(PREFIX_JS, BESIDE, GLOBAL), prefixAt("C:\\Users\\u\\AppData\\Roaming\\npm"), "C:\\work"), {
     file: NODE,
     prefix: [GLOBAL],
     source: "global-prefix",
@@ -31,7 +34,7 @@ test("on Windows, a globally upgraded npm under npm's prefix wins, as npm.cmd do
 });
 
 test("on Windows with no npm under the global prefix, the npm-cli.js beside node.exe runs", () => {
-  assert.deepEqual(npmLauncher("win32", {}, NODE, only(PREFIX_JS, BESIDE), prefixAt("C:\\Users\\u\\AppData\\Roaming\\npm")), {
+  assert.deepEqual(npmLauncher("win32", {}, NODE, only(PREFIX_JS, BESIDE), prefixAt("C:\\Users\\u\\AppData\\Roaming\\npm"), "C:\\work"), {
     file: NODE,
     prefix: [BESIDE],
     source: "beside-node",
@@ -44,7 +47,7 @@ test("on Windows with no npm under the global prefix, the npm-cli.js beside node
 test("on Windows with no npm-cli.js anywhere, it refuses and names where it looked", () => {
   assert.throws(
     () => npmLauncher("win32", {}, "C:\\tools\\node.exe", only(), noPrefix),
-    /cannot launch npm on Windows without a shell: no npm-cli\.js beside C:\\tools\\node\.exe \(looked for C:\\tools\\node_modules\\npm\\bin\\npm-cli\.js\)/,
+    /cannot launch npm on Windows without a shell: no npm-cli\.js beside C:\\tools\\node\.exe \(looked for C:\\tools\\node_modules\\npm\\bin\\npm-cli\.js; npm's global prefix could not be probed: no C:\\tools\\node_modules\\npm\\bin\\npm-prefix\.js\)/,
   );
 });
 
@@ -77,7 +80,14 @@ test("the launcher this box resolves with npm_execpath removed actually runs npm
   const env = { ...process.env };
   delete env["npm_execpath"];
   const l = npmLauncher(process.platform, env);
-  assert.ok((process.platform === "win32" ? ["global-prefix", "beside-node"] : ["path"]).includes(l.source), l.source);
+  let expected = "path";
+  if (process.platform === "win32") {
+    // Probe the way npm.cmd does, independently, and require exactly that arm.
+    const bin = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin");
+    const prefix = execFileSync(process.execPath, [path.join(bin, "npm-prefix.js")], { encoding: "utf8" }).trim();
+    expected = fs.existsSync(path.join(prefix, "node_modules", "npm", "bin", "npm-cli.js")) ? "global-prefix" : "beside-node";
+  }
+  assert.equal(l.source, expected);
   const version = execFileSync(l.file, [...l.prefix, "--version"], { encoding: "utf8", env }).trim();
   assert.match(version, /^\d+\.\d+\.\d+/);
 });

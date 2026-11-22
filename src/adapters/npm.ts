@@ -23,9 +23,11 @@ export interface NpmLauncher {
 const NPM_CLI = /^npm-cli\.[cm]?js$/;
 
 /** What `npm-prefix.js` prints: npm's global prefix, or null when it cannot be read. */
-function readGlobalPrefix(nodePath: string, prefixJs: string): string | null {
+function readGlobalPrefix(nodePath: string, prefixJs: string, cwd: string): string | null {
   try {
-    const out = execFileSync(nodePath, [prefixJs], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 30_000 });
+    // npm.cmd runs npm-prefix.js in the directory npm is invoked in, where a
+    // project .npmrc can set prefix, so the probe runs in the npm call's cwd too.
+    const out = execFileSync(nodePath, [prefixJs], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 30_000 });
     const line = out.split(/\r?\n/).find((l) => l.trim() !== "");
     return line ? line.trim() : null;
   } catch {
@@ -51,7 +53,8 @@ export function npmLauncher(
   env: Record<string, string | undefined> = process.env,
   nodePath: string = process.execPath,
   exists: (p: string) => boolean = fs.existsSync,
-  globalPrefix: (nodePath: string, prefixJs: string) => string | null = readGlobalPrefix,
+  globalPrefix: (nodePath: string, prefixJs: string, cwd: string) => string | null = readGlobalPrefix,
+  cwd: string = process.cwd(),
 ): NpmLauncher {
   const execpath = env["npm_execpath"];
   // win32's basename splits on both separators, so it reads either spelling.
@@ -60,16 +63,19 @@ export function npmLauncher(
     const bin = path.win32.join(path.win32.dirname(nodePath), "node_modules", "npm", "bin");
     const beside = path.win32.join(bin, "npm-cli.js");
     const prefixJs = path.win32.join(bin, "npm-prefix.js");
+    const tried: string[] = [];
     if (exists(prefixJs)) {
-      const prefix = globalPrefix(nodePath, prefixJs);
+      const prefix = globalPrefix(nodePath, prefixJs, cwd);
       if (prefix) {
-        const global = path.win32.join(prefix, "node_modules", "npm", "bin", "npm-cli.js");
-        if (exists(global)) return { file: nodePath, prefix: [global], source: "global-prefix" };
+        const globalCli = path.win32.join(prefix, "node_modules", "npm", "bin", "npm-cli.js");
+        if (exists(globalCli)) return { file: nodePath, prefix: [globalCli], source: "global-prefix" };
+        tried.push(globalCli);
       }
     }
     if (exists(beside)) return { file: nodePath, prefix: [beside], source: "beside-node" };
     throw new Error(
-      `cannot launch npm on Windows without a shell: no npm-cli.js beside ${nodePath} (looked for ${beside}). ` +
+      `cannot launch npm on Windows without a shell: no npm-cli.js beside ${nodePath} (looked for ${[...tried, beside].join(", ")}; ` +
+        `npm's global prefix ${exists(prefixJs) ? "was probed with " + prefixJs : "could not be probed: no " + prefixJs}). ` +
         `Run the kit through npm (npm exec / an npm script), or install npm beside node.`,
     );
   }

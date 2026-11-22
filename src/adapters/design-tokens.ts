@@ -48,7 +48,7 @@ export interface LoadContext {
 
 function run(cmd: string, args: string[], cwd: string): string {
   // npm goes through its own entry point under this node: no shell anywhere.
-  const npm = cmd === "npm" ? npmLauncher() : null;
+  const npm = cmd === "npm" ? npmLauncher(process.platform, process.env, process.execPath, undefined, undefined, cwd) : null;
   const file = npm ? npm.file : cmd;
   const argv = npm ? [...npm.prefix, ...args] : args;
   try {
