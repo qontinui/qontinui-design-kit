@@ -68,7 +68,7 @@ function stubDoorProject() {
   return { dir, argv: () => JSON.parse(fs.readFileSync(path.join(pkg, "dist", "argv.json"), "utf8")), cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
-test("--storage-state is passed to the spawned door as the wrapper's own --storage-state; --json records the UNKNOWN on exit 3", async () => {
+test("validate-guide --storage-state is passed to the spawned door as the wrapper's own --storage-state; --json records the UNKNOWN on exit 3", async () => {
   const p = stubDoorProject();
   try {
     const lines = [];
@@ -108,7 +108,7 @@ test("an unreadable --storage-state file is refused (exit 2) before any door run
   }
 });
 
-test("--json writes a report whose failures match the stdout ERROR lines on a specimen page", async (t) => {
+test("validate-guide --json writes a report whose failures match the stdout ERROR lines on a specimen page", async (t) => {
   if (!(await needDoor(t, assert))) return;
   const sp = await writeSpecimen({ name: "json" });
   try {
