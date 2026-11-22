@@ -299,7 +299,7 @@ test("validate-guide --json naming a hard link to the guide is refused as an inp
 const evaluated = (value) => ({ action: "pageEvaluate", result: { result: { value } } });
 const sheets = (pending) => evaluated({ requested: 1, failed: [], unreadable: [], pending });
 const LATE = "http://127.0.0.1:9/late.css";
-const PENDING_LATE = `unknown(stylesheet-pending): ${LATE} had no stylesheet when the page was read (still loading, or blocked before any response)`;
+const PENDING_LATE = `unknown(stylesheet-pending): ${LATE} had no stylesheet, or an empty one with no recorded response, when the page was read (still loading, blocked before any response, or its timing entry was cleared)`;
 
 test("validate-guide: a sheet pending at the first stylesheet read is UNKNOWN even when the last read finds it loaded", async () => {
   const p = stubDoorProject();
@@ -732,6 +732,20 @@ test("validate-guide and check-states: a stylesheet check the door did not answe
     assert.equal(await main(["check-states", page, "--root", p.dir, "--file", "coverage.json"], () => undefined), 3);
     const cov = JSON.parse(fs.readFileSync(path.join(p.dir, "coverage.json"), "utf8"));
     assert.deepEqual(cov.cells.map((c) => [c.id, c.status, c.unknown]), [["c1", "unknown", NO_SHEET_ANSWER]]);
+  } finally {
+    p.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- review round 24
+
+test("validate-guide: unknown(redirected) names the target by origin and path too, so a code in the target's query stays out of the reason", async () => {
+  const p = stubDoorProject();
+  try {
+    p.answer([sheets([]), { action: "discover", result: {} }, SNAPSHOT, evaluated(["rgb(17, 17, 17)"]), sheets([]), evaluated("http://127.0.0.1:9/login")]);
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/app?code=SECRET#t", "--root", p.dir], (s) => lines.push(s)), 3);
+    assert.deepEqual(lines, ["design-kit: unknown(redirected): http://127.0.0.1:9/app was answered by http://127.0.0.1:9/login; a verdict there is not a verdict on the target"]);
   } finally {
     p.cleanup();
   }

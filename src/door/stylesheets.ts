@@ -21,8 +21,9 @@
  *   so the timing entry is what catches them on a URL target. A link with no
  *   sheet despite a response is counted as not loaded too;
  * - a link or an `@import` with no sheet and no recorded response is `pending`:
- *   still loading, or blocked before any response. That is UNKNOWN, not a load
- *   failure. An `@import` naming a sheet above it (a cycle, which the browser
+ *   still loading, or blocked before any response. So is one whose sheet has no
+ *   rules and no recorded response: a 404'd sheet whose timing entry was cleared
+ *   looks exactly like it. That is UNKNOWN, not a load failure. An `@import` naming a sheet above it (a cycle, which the browser
  *   does not follow) is not counted;
  * - every `document.styleSheets` entry whose `cssRules` throws is `unreadable`:
  *   a sheet fetched without CORS from another origin (the link has no
@@ -73,6 +74,9 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
     if (!sheet || i === undefined || i.code === 0 || i.type !== '') return false;
     try { return sheet.cssRules.length === 0; } catch (e) { return false; }
   };
+  // A readable sheet with no rules and no recorded response is unproven: a 404'd sheet whose timing entry was
+  // cleared (or never kept, the buffer being full) looks exactly like it, so it is pending, not loaded.
+  const emptySheet = (sheet) => { try { return sheet.cssRules.length === 0; } catch (e) { return false; } };
   const failed = [];
   const pending = [];
   const unreadable = [];
@@ -87,6 +91,7 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
     const i = seen.get(l.href);
     if (badResponse(i) || refusedSheet(l.sheet, i)) failed.push(href);
     else if (!l.sheet) (i === undefined || i.code === 0 ? pending : failed).push(href);
+    else if (i === undefined && emptySheet(l.sheet)) pending.push(href);
   }
   // ancestors: the hrefs of the sheets above this one. The browser does not follow an @import naming one of them
   // (a cycle), so that rule has no sheet by design, not because a load failed. The walk has no depth cap: it follows
@@ -105,6 +110,7 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
       }
       const i = seen.get(href);
       if (badResponse(i) || refusedSheet(r.styleSheet, i)) failed.push(href);
+      else if (r.styleSheet && i === undefined && emptySheet(r.styleSheet)) pending.push(href);
       else if (r.styleSheet) walkSheet(r.styleSheet, chain);
       else if (!chain.includes(href)) (i === undefined || i.code === 0 ? pending : failed).push(href);
     }
@@ -169,7 +175,7 @@ export const stylesheetUnreadable = (unreadable: readonly string[]): string =>
 
 /** The UNKNOWN a stylesheet that had not loaded when the page was read reads as. */
 export const stylesheetPending = (pending: readonly string[]): string =>
-  `unknown(stylesheet-pending): ${pending.join(", ")} had no stylesheet when the page was read (still loading, or blocked before any response)`;
+  `unknown(stylesheet-pending): ${pending.join(", ")} had no stylesheet, or an empty one with no recorded response, when the page was read (still loading, blocked before any response, or its timing entry was cleared)`;
 
 /** The first UNKNOWN a stylesheet load reads as, in order of certainty; null when every sheet loaded. */
 export function stylesheetUnknown(load: StylesheetLoad): string | null {

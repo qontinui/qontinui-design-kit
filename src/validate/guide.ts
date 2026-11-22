@@ -9,7 +9,7 @@
  * its computed form first, because `validateElement` compares computed strings.
  */
 import fs from "node:fs";
-import { evalValue, openPage, runDoor } from "../door/inject.js";
+import { evalValue, isUrlTarget, openPage, runDoor } from "../door/inject.js";
 import { STYLESHEET_LOAD_EXPRESSION, mergeStylesheetLoads, stylesheetLoad, stylesheetUnknown, type StylesheetLoad } from "../door/stylesheets.js";
 import type { StyleConstraint, StyleGuideConfig, StyleRule } from "../emit/guide.js";
 
@@ -196,6 +196,15 @@ export function guideJson(r: GuideReport | GuidePartial, exitCode: GuideJson["ex
   };
 }
 
+/** A URL's path with percent-escapes decoded, so two spellings of one path compare equal. */
+function decodedPath(u: URL): string {
+  try {
+    return decodeURIComponent(u.pathname);
+  } catch {
+    return u.pathname;
+  }
+}
+
 /**
  * The page the door read is the page it was sent to: the same origin and path. A
  * redirect (an expired --storage-state sent to the login page, a trailing slash
@@ -205,7 +214,8 @@ function samePage(requested: string, read: string): boolean {
   try {
     const a = new URL(requested);
     const b = new URL(read);
-    return a.origin === b.origin && a.pathname === b.pathname;
+    // Decoded: the browser escapes some characters Node's parser keeps (`|` is `%7C` in location.href).
+    return a.origin === b.origin && decodedPath(a) === decodedPath(b);
   } catch {
     return false;
   }
@@ -257,7 +267,8 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
     const readUrl = evalValue(run.lines[5]);
     if (typeof readUrl !== "string") throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} did not say which page it read`);
     if (!samePage(page.url, readUrl)) {
-      throw unknownVerdict(`unknown(redirected): ${target} was answered by ${pageOf(readUrl)}; a verdict there is not a verdict on the target`);
+      const named = isUrlTarget(target) ? pageOf(target) : target;
+      throw unknownVerdict(`unknown(redirected): ${named} was answered by ${pageOf(readUrl)}; a verdict there is not a verdict on the target`);
     }
     // The count is the target's only once the page is the target and the snapshot is whole; a truncated one is a floor.
     if (!snap.truncated) known.elements = snap.elements.length;

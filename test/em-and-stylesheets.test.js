@@ -150,6 +150,7 @@ test("check-states: the kit's own --dk-kit-states does not make a page with no t
     assert.equal(code, 3);
     assert.equal(cov.summary.measured, 0);
     assert.deepEqual(cov.stylesheets, { requested: 0, failed: [], unreadable: [], pending: [] });
+    assert.equal(nonBaseline(cov).length, 36);
     for (const c of nonBaseline(cov)) assert.equal(c.unknown, "unknown(no-token-values): the page declares no --dk-* custom property other than --dk-kit-states", c.id);
   } finally {
     sp.cleanup();
@@ -359,7 +360,7 @@ test("validate-guide: a stylesheet still loading when the page is read is unknow
   });
   assert.equal(r.code, 3);
   assert.deepEqual(r.lines, [
-    "design-kit: unknown(stylesheet-pending): /slow.css had no stylesheet when the page was read (still loading, or blocked before any response)",
+    "design-kit: unknown(stylesheet-pending): /slow.css had no stylesheet, or an empty one with no recorded response, when the page was read (still loading, blocked before any response, or its timing entry was cleared)",
   ]);
   assert.deepEqual(r.report.stylesheets, { requested: 2, failed: [], unreadable: [], pending: ["/slow.css"] });
 });
@@ -653,5 +654,37 @@ test("validate-guide: a cross-origin @import is unreadable even when its server 
   } finally {
     other.closeAllConnections();
     await new Promise((r) => other.close(r));
+  }
+});
+
+// ---------------------------------------------------------------- review round 24
+
+test("validate-guide: a linked sheet that 404'd on a URL target whose page cleared its resource timing is pending (exit 3), not loaded", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("cleared-url", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css">', '<script>addEventListener("load", () => performance.clearResourceTimings());</script>')],
+  });
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.lines, ["design-kit: unknown(stylesheet-pending): /tokens.css had no stylesheet, or an empty one with no recorded response, when the page was read (still loading, blocked before any response, or its timing entry was cleared)"]);
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: ["/tokens.css"] });
+});
+
+test("validate-guide: a file target whose name the browser escapes (a|b.html) is the same page, not a redirect (exit 0)", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("a | cannot be in a Windows file name");
+    return;
+  }
+  if (!(await needDoor(t, assert))) return;
+  const dir = tmpDir("pipe-name");
+  try {
+    const guide = path.join(dir, "guide.json");
+    const page = path.join(dir, "a|b.html");
+    fs.writeFileSync(guide, JSON.stringify(GUIDE));
+    fs.writeFileSync(page, PAGE);
+    fs.writeFileSync(path.join(dir, "tokens.css"), TOKENS);
+    const lines = [];
+    assert.equal(await main(["validate-guide", guide, page, "--root", ROOT], (s) => lines.push(s)), 0, lines.join("\n"));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
