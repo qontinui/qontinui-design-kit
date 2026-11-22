@@ -17,7 +17,8 @@
  *   sheet despite a response is counted as not loaded too;
  * - a link or an `@import` with no sheet and no recorded response is `pending`:
  *   still loading, or blocked before any response. That is UNKNOWN, not a load
- *   failure;
+ *   failure. An `@import` naming a sheet above it (a cycle, which the browser
+ *   does not follow) is not counted;
  * - every `document.styleSheets` entry whose `cssRules` throws is `unreadable`:
  *   a sheet fetched without CORS from another origin (the link has no
  *   `crossorigin` attribute, or its server sends no
@@ -74,10 +75,13 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
     if (badResponse(i)) failed.push(href);
     else if (!l.sheet) (i === undefined || i.code === 0 ? pending : failed).push(href);
   }
-  const walkSheet = (sheet, depth) => {
+  // ancestors: the hrefs of the sheets above this one. The browser does not follow an @import naming one of them
+  // (a cycle), so that rule has no sheet by design, not because a load failed. The walk has no depth cap: it follows
+  // only the imports the browser loaded, and a page too deep for it throws, which reads as no answer (UNKNOWN).
+  const walkSheet = (sheet, ancestors) => {
     let rules;
     try { rules = sheet.cssRules; } catch (e) { unreadable.push(sheet.href || '<inline style>'); return; }
-    if (depth > 8) return;
+    const chain = sheet.href ? [...ancestors, sheet.href] : ancestors;
     for (const r of Array.from(rules)) {
       if (!(r instanceof CSSImportRule)) continue;
       // The imported sheet's own href is the URL the browser requested; a parent reached through a redirect
@@ -88,11 +92,11 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
       }
       const i = seen.get(href);
       if (badResponse(i)) failed.push(href);
-      else if (r.styleSheet) walkSheet(r.styleSheet, depth + 1);
-      else (i === undefined || i.code === 0 ? pending : failed).push(href);
+      else if (r.styleSheet) walkSheet(r.styleSheet, chain);
+      else if (!chain.includes(href)) (i === undefined || i.code === 0 ? pending : failed).push(href);
     }
   };
-  for (const s of Array.from(document.styleSheets)) walkSheet(s, 0);
+  for (const s of Array.from(document.styleSheets)) walkSheet(s, []);
   return { requested: links.length, failed, unreadable, pending };
 })()`;
 

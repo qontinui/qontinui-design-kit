@@ -186,7 +186,7 @@ test("a validate-guide run that exits 2 leaves no earlier --json report behind",
   try {
     const out = path.join(p.dir, "out", "report.json");
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, JSON.stringify({ exitCode: 0, stale: true }));
+    fs.writeFileSync(out, JSON.stringify({ schema: 1, exitCode: 0, stale: true }));
     const lines = [];
     assert.equal(await main(["validate-guide", "guide.json", "not-a-file.html", "--root", p.dir, "--json", "out/report.json"], (s) => lines.push(s)), 2);
     assert.deepEqual(lines, ["design-kit: not a URL and not a file: not-a-file.html"]);
@@ -202,7 +202,7 @@ test("validate-guide runs refused for a missing target or an extra argument leav
     const out = path.join(p.dir, "out", "report.json");
     for (const argv of [["validate-guide", "guide.json"], ["validate-guide", "guide.json", "t.html", "extra"]]) {
       fs.mkdirSync(path.dirname(out), { recursive: true });
-      fs.writeFileSync(out, JSON.stringify({ exitCode: 0, stale: true }));
+      fs.writeFileSync(out, JSON.stringify({ schema: 1, exitCode: 0, stale: true }));
       assert.equal(await main([...argv, "--root", p.dir, "--json", "out/report.json"], () => undefined), 2, argv.join(" "));
       assert.equal(fs.existsSync(out), false, argv.join(" "));
     }
@@ -216,7 +216,7 @@ test("validate-guide --json: an argument refused at parse time leaves no earlier
   try {
     const out = path.join(p.dir, "out", "report.json");
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, JSON.stringify({ exitCode: 0, stale: true }));
+    fs.writeFileSync(out, JSON.stringify({ schema: 1, exitCode: 0, stale: true }));
     assert.equal(await main(["validate-guide", "guide.json", "t.html", "--root", p.dir, "--json", "out/report.json", "--bogus"], () => undefined), 2);
     assert.equal(fs.existsSync(out), false, "unknown option");
 
@@ -348,7 +348,7 @@ test("validate-guide --json is not cleared when a value flag before it has no va
   const cwd = process.cwd();
   try {
     process.chdir(p.dir);
-    fs.writeFileSync(path.join(p.dir, "r.json"), JSON.stringify({ stale: true }));
+    fs.writeFileSync(path.join(p.dir, "r.json"), JSON.stringify({ schema: 1, exitCode: 0, stale: true }));
     const noRoot = [];
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", "--json", "r.json"], (s) => noRoot.push(s)), 2);
     assert.equal(noRoot[0].split("\n")[0], "--root needs a value");
@@ -431,12 +431,12 @@ test("validate-guide: a valueless flag other than --root or --json still clears 
   const p = stubDoorProject();
   try {
     const report = path.join(p.dir, "r.json");
-    fs.writeFileSync(report, JSON.stringify({ exitCode: 0 }));
+    fs.writeFileSync(report, JSON.stringify({ schema: 1, exitCode: 0 }));
     const trailing = [];
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "r.json", "--file"], (s) => trailing.push(s)), 2);
     assert.equal(trailing[0].split("\n")[0], "--file needs a value");
     assert.equal(fs.existsSync(report), false);
-    fs.writeFileSync(report, JSON.stringify({ exitCode: 0 }));
+    fs.writeFileSync(report, JSON.stringify({ schema: 1, exitCode: 0 }));
     const empty = [];
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--kit-dir", "", "--root", p.dir, "--json", "r.json"], (s) => empty.push(s)), 2);
     assert.equal(empty[0].split("\n")[0], "--kit-dir needs a value");
@@ -513,7 +513,7 @@ test("validate-guide: an empty flag value before the command is that flag's valu
   const cwd = process.cwd();
   try {
     process.chdir(p.dir);
-    fs.writeFileSync(path.join(p.dir, "r.json"), JSON.stringify({ exitCode: 0 }));
+    fs.writeFileSync(path.join(p.dir, "r.json"), JSON.stringify({ schema: 1, exitCode: 0 }));
     const lines = [];
     assert.equal(await main(["--file", "", "validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "r.json"], (s) => lines.push(s)), 2);
     assert.equal(lines[0].split("\n")[0], "--file needs a value");
@@ -532,6 +532,30 @@ test("validate-guide: a truncated snapshot is unknown(snapshot-truncated) and it
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "r.json"], () => undefined), 3);
     const r = JSON.parse(fs.readFileSync(path.join(p.dir, "r.json"), "utf8"));
     assert.deepEqual([r.exitCode, r.unknown, r.elements], [3, "unknown(snapshot-truncated): the page has more elements than one snapshot returns", null]);
+  } finally {
+    p.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- review round 17
+
+test("validate-guide --json naming a file that is not an earlier report (a page, another tool's JSON) is refused (exit 2) and the file kept", async () => {
+  const p = stubDoorProject();
+  try {
+    const page = path.join(p.dir, "page.html");
+    fs.writeFileSync(page, "<!doctype html><p>x</p>");
+    const lines = [];
+    // `--json` read as a boolean switch: the page becomes the report path and the target is missing.
+    assert.equal(await main(["validate-guide", "guide.json", "--root", p.dir, "--json", "page.html"], (s) => lines.push(s)), 2);
+    assert.deepEqual(lines, [`design-kit: --json ${page} is not an earlier validate-guide report (a JSON object with schema 1 and a numeric exitCode); refusing to overwrite it`]);
+    assert.equal(fs.readFileSync(page, "utf8"), "<!doctype html><p>x</p>");
+
+    const other = path.join(p.dir, "other.json");
+    fs.writeFileSync(other, JSON.stringify({ exitCode: 0 }));
+    const second = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "other.json"], (s) => second.push(s)), 2);
+    assert.deepEqual(second, [`design-kit: --json ${other} is not an earlier validate-guide report (a JSON object with schema 1 and a numeric exitCode); refusing to overwrite it`]);
+    assert.equal(fs.readFileSync(other, "utf8"), '{"exitCode":0}');
   } finally {
     p.cleanup();
   }

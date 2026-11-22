@@ -529,3 +529,25 @@ test("validate-guide: a link typed text/css with a parameter is a CSS link, so i
   assert.equal(r.code, 3);
   assert.deepEqual(r.report.stylesheets, { requested: 2, failed: ["/gone.css"], unreadable: [], pending: [] });
 });
+
+// ---------------------------------------------------------------- review round 17
+
+test("validate-guide: a sheet that 404s eleven @import levels down did not load (exit 3); the walk has no depth cap", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const map = { "/route": [200, "text/html", head('<link rel="stylesheet" href="/s0.css">')] };
+  for (let i = 0; i <= 10; i++) map[`/s${i}.css`] = [200, "text/css", `@import "/s${i + 1}.css";\n${i === 0 ? TOKENS : ""}`];
+  const r = await validateUrl("deep-import", map);
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: ["/s11.css"], unreadable: [], pending: [] });
+});
+
+test("validate-guide: a cyclic @import, which the browser skips by design, is not a sheet that did not load (exit 0)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("cycle-import", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/s0.css">')],
+    "/s0.css": [200, "text/css", `@import "/s1.css";\n${TOKENS}`],
+    "/s1.css": [200, "text/css", '@import "/s0.css";\n'],
+  });
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
+});

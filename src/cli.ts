@@ -103,6 +103,18 @@ function samePath(a: string, b: string): boolean {
   }
 }
 
+/** An earlier `validate-guide --json` report: a JSON object with `schema: 1` and a numeric `exitCode`. */
+function isGuideReport(text: string): boolean {
+  try {
+    const v: unknown = JSON.parse(text);
+    if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+    const r = v as { schema?: unknown; exitCode?: unknown };
+    return r.schema === 1 && typeof r.exitCode === "number";
+  } catch {
+    return false;
+  }
+}
+
 /** The options that take a value, and the field each sets: one table for parseArgs and for the raw-argv scan in clearJsonReport. */
 const VALUE_OPTIONS = {
   "--root": "root",
@@ -121,10 +133,11 @@ const VALUE_FLAGS: ReadonlySet<string> = new Set(Object.keys(VALUE_OPTIONS));
  * refuse the run (exit 2), argument parsing included, so a refused run leaves no
  * previous verdict standing at that path. It reads the raw argv for that reason.
  * Two argvs name no report it could resolve and clear nothing: one with a word
- * before `validate-guide`, and one whose `--root` or `--json` has no value. A
- * path that names any word of the command line (the guide, a file target, the
- * storage state), or that cannot be removed (a directory), is refused with
- * exit 2 and left as it is. Returns the exit code to stop with, or null to go on.
+ * before `validate-guide`, and one whose `--root` or `--json` has no value. Only
+ * an earlier report is removed: a path that names any word of the command line
+ * (the guide, a file target, the storage state), any other file that is not a
+ * report, or one that cannot be removed (a directory), is refused with exit 2
+ * and left as it is. Returns the exit code to stop with, or null to go on.
  */
 function clearJsonReport(argv: string[], out: Out): number | null {
   let root = process.cwd();
@@ -159,6 +172,20 @@ function clearJsonReport(argv: string[], out: Out): number | null {
   if (storageState) inputs.push(path.resolve(root, storageState));
   if (inputs.some((f) => samePath(f, file))) {
     out(`design-kit: --json ${file} is one of validate-guide's inputs; refusing to overwrite it`);
+    return 2;
+  }
+  // Only an earlier report is removed. Any other file there (a page, another tool's JSON, a path
+  // `--json` took when read as a switch) is refused and kept, whatever shape the argv has.
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    out(`design-kit: --json ${file} cannot be replaced: ${(e as Error).message}`);
+    return 2;
+  }
+  if (!isGuideReport(text)) {
+    out(`design-kit: --json ${file} is not an earlier validate-guide report (a JSON object with schema 1 and a numeric exitCode); refusing to overwrite it`);
     return 2;
   }
   try {
