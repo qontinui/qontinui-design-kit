@@ -183,11 +183,15 @@ function entriesFor(leaves: Leaf[]): Entry[] {
     const where = slot === LAYER ? "a shadow-array element" : (slot ?? "no field");
     if (need === undefined) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${where}, which is not a shadow field`]);
     // Resolve first, so a broken or cyclic chain behind the target is named as such, not as a type mismatch.
-    const value = resolveLeaf(t, trail).value;
+    let value = resolveLeaf(t, trail).value;
     const got = typeOf(t);
     if (got !== need) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${where}, which needs a ${need} leaf; ${t.path} is ${got ?? "untyped"}`]);
     if (slot === LAYER && Array.isArray(value)) {
-      throw new SourceError([`leaf ${owner.path}: alias {${field}} names a multi-layer shadow; a shadow-array element is one layer`]);
+      // A one-element shadow array is one layer; a longer one cannot fill a single element.
+      if (value.length !== 1) {
+        throw new SourceError([`leaf ${owner.path}: alias {${field}} names a shadow array of ${value.length} layers; a shadow-array element is one layer`]);
+      }
+      value = value[0];
     }
     return { value, css: `var(${varName(t.path)})` };
   };

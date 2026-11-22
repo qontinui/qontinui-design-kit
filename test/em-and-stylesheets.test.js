@@ -259,9 +259,19 @@ test("an em breakpoint is px at the 16px initial font size in the guide; a break
   }
 });
 
-test("an em type scale is listed at the 16px root, as in 0.1.x, and its heading rule excludes the body step", async () => {
-  const g = await guideOf({ type: { scale: { sm: leaf("dimension", em(0.875), "authored(f-s)"), md: leaf("dimension", em(1), "authored(f-s)"), lg: leaf("dimension", em(1.5), "authored(f-s)") } } });
+test("an em type scale, spacing step and radius are listed at the 16px root, as in 0.1.x; an em line height stays em; the heading rule excludes the body step", async () => {
+  const g = await guideOf({
+    type: {
+      scale: { sm: leaf("dimension", em(0.875), "authored(f-s)"), md: leaf("dimension", em(1), "authored(f-s)"), lg: leaf("dimension", em(1.5), "authored(f-s)") },
+      leading: { relaxed: leaf("dimension", em(1.5), "authored(f-s)") },
+    },
+    space: { scale: { md: leaf("dimension", em(0.5), "authored(f-s)") }, radius: { sm: leaf("dimension", em(0.25), "authored(f-s)") } },
+  });
   assert.deepEqual(g.tokens.typography.fontSizes, { lg: "24px", md: "16px", sm: "14px" });
+  assert.deepEqual(g.tokens.spacing, { md: "8px" });
+  assert.deepEqual(g.tokens.borderRadius, { sm: "4px" });
+  // A line height in em is relative to the element's font size, like tracking: it stays em.
+  assert.deepEqual(g.tokens.typography.lineHeights, { relaxed: "1.5em" });
   assert.deepEqual(g.rules.find((r) => r.id === "heading-size-on-scale").constraints[0].values, ["24px"]);
 });
 

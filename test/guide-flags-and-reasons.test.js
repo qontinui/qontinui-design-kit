@@ -365,7 +365,12 @@ test("validate-guide --json is not cleared when a value flag before it has no va
 
 // ---------------------------------------------------------------- review round 10
 
-test("validate-guide: a --json report that cannot be written still prints the verdict first, then the write failure (exit 2)", async () => {
+test("validate-guide: a --json report that cannot be written still prints the verdict first, then the write failure (exit 2)", async (t) => {
+  // A read-only directory stops the write only for a non-root user on a POSIX filesystem; elsewhere the case cannot be built.
+  if (process.platform === "win32" || process.getuid?.() === 0) {
+    t.skip("a read-only directory does not stop root or a Windows write; the failure cannot be built here");
+    return;
+  }
   const p = stubDoorProject();
   const ro = path.join(p.dir, "ro");
   try {
@@ -374,10 +379,26 @@ test("validate-guide: a --json report that cannot be written still prints the ve
     const lines = [];
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "ro/r.json"], (s) => lines.push(s)), 2);
     assert.deepEqual(lines[0], "design-kit: unknown(instrument-cannot-read): @qontinui/ui-bridge-wrapper@9.9.9 gave no design snapshot ()");
-    assert.match(lines[1], /^design-kit: --json .*\/ro\/r\.json could not be written: EACCES/);
+    assert.match(lines[1], /^design-kit: --json .*[\\/]ro[\\/]r\.json could not be written: EACCES/);
     assert.equal(lines.length, 2);
   } finally {
     fs.chmodSync(ro, 0o755);
+    p.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- review round 11
+
+test("validate-guide --json naming the page file target is refused as an input, and the page is kept", async () => {
+  const p = stubDoorProject();
+  try {
+    const page = path.join(p.dir, "page.html");
+    fs.writeFileSync(page, "<!doctype html><p>x</p>");
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", page, "--root", p.dir, "--json", page], (s) => lines.push(s)), 2);
+    assert.deepEqual(lines, [`design-kit: --json ${page} is one of validate-guide's inputs; refusing to overwrite it`]);
+    assert.equal(fs.readFileSync(page, "utf8"), "<!doctype html><p>x</p>");
+  } finally {
     p.cleanup();
   }
 });

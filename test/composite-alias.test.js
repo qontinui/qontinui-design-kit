@@ -154,14 +154,14 @@ test("a shadow field alias must name a leaf of the field's type; a dimension ali
   assert.equal(JSON.parse(outputs["fixture.styleguide.uibridge.json"]).tokens.shadows.glow, "0px 2px 12px 0px #000000");
 });
 
-test("a shadow-array element alias names one layer; one naming a multi-layer shadow is refused", async () => {
+test("a shadow-array element alias names one layer; one naming a shadow array of several layers is refused", async () => {
   const layer = { offsetX: px(0), offsetY: px(1), blur: px(2), color: "#000000" };
   const { outputs } = await compile(typed(["{space.depth.base}", layer], { base: leaf("shadow", { ...layer, blur: px(4) }, "authored(finding-glow)") }));
   assert.match(outputs["tokens.css"], /^ {2}--dk-space-depth-glow: var\(--dk-space-depth-base\), 0px 1px 2px 0px #000000;$/m);
   assert.equal(JSON.parse(outputs["fixture.styleguide.uibridge.json"]).tokens.shadows.glow, "0px 1px 4px 0px #000000, 0px 1px 2px 0px #000000");
   const r = await cli(typed(["{space.depth.base}", layer], { base: leaf("shadow", [layer, layer], "authored(finding-glow)") }));
   assert.equal(r.code, 2);
-  assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {space.depth.base} names a multi-layer shadow; a shadow-array element is one layer"]);
+  assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {space.depth.base} names a shadow array of 2 layers; a shadow-array element is one layer"]);
 });
 
 // ---------------------------------------------------------------- review round 3
@@ -205,4 +205,15 @@ test("a shadow-object key named layer is not a shadow field: its alias is refuse
   const r = await cli(glowSource({ offsetX: px(0), offsetY: px(0), blur: px(2), color: "#000000", layer: "{space.depth.base}" }, { base: leaf("shadow", { offsetX: px(0), offsetY: px(1), blur: px(4), color: "#000000" }, "authored(finding-glow)") }));
   assert.equal(r.code, 2);
   assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {space.depth.base} fills layer, which is not a shadow field"]);
+});
+
+// ---------------------------------------------------------------- review round 11
+
+test("a shadow-array element alias naming a one-element shadow array is that one layer; a longer array is refused with its layer count", async () => {
+  const layer = { offsetX: px(0), offsetY: px(1), blur: px(2), color: "#000000" };
+  const { outputs } = await compile(typed(["{space.depth.one}", "0 0 1px red"], { one: leaf("shadow", [layer], "authored(finding-glow)") }));
+  assert.equal(JSON.parse(outputs["fixture.styleguide.uibridge.json"]).tokens.shadows.glow, "0px 1px 2px 0px #000000, 0 0 1px red");
+  const r = await cli(typed(["{space.depth.two}"], { two: leaf("shadow", [layer, layer], "authored(finding-glow)") }));
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {space.depth.two} names a shadow array of 2 layers; a shadow-array element is one layer"]);
 });
