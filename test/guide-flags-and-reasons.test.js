@@ -247,8 +247,9 @@ test("validate-guide --json naming the --storage-state file, or found behind an 
     fs.writeFileSync(page, "<!doctype html><p>x</p>");
     const shifted = [];
     assert.equal(await main(["validate-guide", "--file", "", "guide.json", page, "--root", p.dir, "--json", page], (s) => shifted.push(s)), 2);
-    assert.equal(shifted[0].split("\n")[0], "--file needs a value");
-    assert.equal(fs.existsSync(page), true, "an empty flag value clears nothing, so the page named by --json is kept");
+    // The empty word is --file's value, so the page is still found among the bare words and kept.
+    assert.deepEqual(shifted, [`design-kit: --json ${page} is one of validate-guide's inputs; refusing to overwrite it`]);
+    assert.equal(fs.existsSync(page), true);
   } finally {
     p.cleanup();
   }
@@ -263,7 +264,8 @@ test("validate-guide and check-states read the stylesheet-load check before the 
   try {
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir], () => undefined), 3);
     const steps = p.steps();
-    assert.deepEqual(steps.map((st) => (isSheetCheck(st) ? "sheets" : st.action)), ["sheets", "discover", "getDesignSnapshot", "pageEvaluate", "sheets"]);
+    const label = (st) => (isSheetCheck(st) ? "sheets" : st.payload?.expression === "location.href" ? "location" : st.action);
+    assert.deepEqual(steps.map(label), ["sheets", "discover", "getDesignSnapshot", "pageEvaluate", "sheets", "location"]);
 
     const page = path.join(p.dir, "specimen.html");
     fs.writeFileSync(page, '<!doctype html><script type="application/json" id="dk-specimen-cells">[{"component":"Button","variant":"primary","state":"hover","id":"c1","target":"b1"}]</script>');
@@ -307,6 +309,7 @@ test("validate-guide: a sheet pending at the first stylesheet read is UNKNOWN ev
       { action: "getDesignSnapshot", result: { elements: [{ elementId: "dom-go", type: "button", styles: { color: "rgb(17, 17, 17)" } }] } },
       evaluated(["rgb(17, 17, 17)"]),
       sheets([]),
+      evaluated("http://127.0.0.1:8/page"),
     ]);
     const lines = [];
     assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:8/page", "--root", p.dir, "--json", "r.json"], (s) => lines.push(s)), 3);
@@ -418,6 +421,85 @@ test("validate-guide: a mistyped option before the guide does not let --json nam
   } finally {
     process.chdir(cwd);
     fs.rmSync(elsewhere, { recursive: true, force: true });
+    p.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------- review round 14
+
+test("validate-guide: a valueless flag other than --root or --json still clears the report it names before the run is refused", async () => {
+  const p = stubDoorProject();
+  try {
+    const report = path.join(p.dir, "r.json");
+    fs.writeFileSync(report, JSON.stringify({ exitCode: 0 }));
+    const trailing = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "r.json", "--file"], (s) => trailing.push(s)), 2);
+    assert.equal(trailing[0].split("\n")[0], "--file needs a value");
+    assert.equal(fs.existsSync(report), false);
+    fs.writeFileSync(report, JSON.stringify({ exitCode: 0 }));
+    const empty = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--kit-dir", "", "--root", p.dir, "--json", "r.json"], (s) => empty.push(s)), 2);
+    assert.equal(empty[0].split("\n")[0], "--kit-dir needs a value");
+    assert.equal(fs.existsSync(report), false);
+  } finally {
+    p.cleanup();
+  }
+});
+
+const SNAPSHOT = { action: "getDesignSnapshot", result: { elements: [{ elementId: "dom-go", type: "button", styles: { color: "rgb(17, 17, 17)" } }] } };
+
+test("validate-guide: a page the door ended on another path of (a login redirect) is UNKNOWN (exit 3) naming it, not a verdict", async () => {
+  const p = stubDoorProject();
+  try {
+    p.answer([sheets([]), { action: "discover", result: {} }, SNAPSHOT, evaluated(["rgb(17, 17, 17)"]), sheets([]), evaluated("http://127.0.0.1:9/login?next=%2Fapp")]);
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/app", "--root", p.dir, "--storage-state", "state.json", "--json", "r.json"], (s) => lines.push(s)), 3);
+    const why = "unknown(redirected): http://127.0.0.1:9/app was answered by http://127.0.0.1:9/login?next=%2Fapp; a verdict there is not a verdict on the target";
+    assert.deepEqual(lines, [`design-kit: ${why}`]);
+    const r = JSON.parse(fs.readFileSync(path.join(p.dir, "r.json"), "utf8"));
+    assert.deepEqual([r.exitCode, r.unknown, r.elements, r.failures, r.stylesheets], [3, why, 1, null, null]);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test("validate-guide: a guide none of whose rules answers to an element is unknown(no-rule-matched) (exit 3), and its report lists the empty results", async () => {
+  const p = stubDoorProject();
+  try {
+    const rule = { id: "heading-size", description: "x", elementType: "heading", constraints: [{ type: "oneOf", property: "fontSize", values: ["32px"] }], severity: "error" };
+    fs.writeFileSync(path.join(p.dir, "headings.json"), JSON.stringify({ ...GUIDE, rules: [rule] }));
+    const none = { requested: 0, failed: [], unreadable: [], pending: [] };
+    p.answer([
+      evaluated(none),
+      { action: "discover", result: {} },
+      { action: "getDesignSnapshot", result: { elements: [{ elementId: "dom-p", type: "text", styles: { fontSize: "16px" } }] } },
+      evaluated(["32px"]),
+      evaluated(none),
+      evaluated("http://127.0.0.1:9/page"),
+    ]);
+    const lines = [];
+    assert.equal(await main(["validate-guide", "headings.json", "http://127.0.0.1:9/page", "--root", p.dir, "--json", "r.json"], (s) => lines.push(s)), 3);
+    const why = "unknown(no-rule-matched): no rule answered to any element; nothing was evaluated";
+    assert.deepEqual(lines, [
+      "UNMATCHED heading-size: no element on the page answers to this rule",
+      "design-kit validate-guide: 1 elements, 1 rules, 0 failures (@qontinui/ui-bridge-wrapper@9.9.9)",
+      `design-kit: ${why}`,
+    ]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(p.dir, "r.json"), "utf8")), {
+      schema: 1,
+      guide: path.join(p.dir, "headings.json"),
+      target: "http://127.0.0.1:9/page",
+      exitCode: 3,
+      unknown: why,
+      elements: 1,
+      rules: 1,
+      failures: [],
+      failuresByRule: {},
+      unmatchedRules: ["heading-size"],
+      stylesheets: none,
+      instrument: "@qontinui/ui-bridge-wrapper@9.9.9",
+    });
+  } finally {
     p.cleanup();
   }
 });

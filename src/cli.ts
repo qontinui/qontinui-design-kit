@@ -119,9 +119,11 @@ const VALUE_FLAGS: ReadonlySet<string> = new Set(Object.keys(VALUE_OPTIONS));
  * `validate-guide --json <file>`: remove an earlier report before anything can
  * refuse the run (exit 2), argument parsing included, so a refused run never
  * leaves a previous verdict standing at that path. It reads the raw argv for
- * that reason. A path that is one of the run's inputs (the guide, a file
- * target), or that cannot be removed (a directory), is refused with exit 2 and
- * left as it is. Returns the exit code to stop with, or null to go on.
+ * that reason. A path that names any word of the command line (the guide, a
+ * file target, the storage state), or that cannot be removed (a directory), is
+ * refused with exit 2 and left as it is. Only a `--root` or `--json` with no
+ * value leaves the report's path unknown, and then nothing is cleared.
+ * Returns the exit code to stop with, or null to go on.
  */
 function clearJsonReport(argv: string[], out: Out): number | null {
   let root = process.cwd();
@@ -132,9 +134,13 @@ function clearJsonReport(argv: string[], out: Out): number | null {
     const v = argv[i] as string;
     if (VALUE_FLAGS.has(v)) {
       const next = argv[i + 1];
-      // A value flag with no value, or an empty one (an unset "$ROOT"): parseArgs refuses the run, and the
-      // paths it would name are unknown, so clear nothing.
-      if (!hasValue(next)) return null;
+      if (!hasValue(next)) {
+        // parseArgs refuses the run. A --root or --json with no value, or an empty one (an unset "$ROOT"),
+        // leaves the report's path unknown, so clear nothing; any other flag leaves it known.
+        if (v === "--root" || v === "--json") return null;
+        if (next === "") i++; // the empty word is that flag's value, not a positional
+        continue;
+      }
       if (v === "--root") root = path.resolve(next);
       if (v === "--json") json = next;
       if (v === "--storage-state") storageState = next;

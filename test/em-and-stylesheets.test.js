@@ -317,7 +317,7 @@ async function validateUrl(name, map) {
     fs.writeFileSync(guide, JSON.stringify(GUIDE));
     const lines = [];
     const code = await main(["validate-guide", guide, `${app.url}/route`, "--root", ROOT, "--json", json], (s) => lines.push(s));
-    return { code, lines, report: JSON.parse(fs.readFileSync(json, "utf8")) };
+    return { code, lines, report: JSON.parse(fs.readFileSync(json, "utf8")), url: app.url };
   } finally {
     await app.close();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -500,4 +500,19 @@ test("validate-guide: a linked sheet that 404s as text/css on a URL target did n
   });
   assert.equal(r.code, 3);
   assert.deepEqual(r.report.stylesheets, { requested: 2, failed: ["/gone.css"], unreadable: [], pending: [] });
+});
+
+// ---------------------------------------------------------------- review round 14
+
+test("validate-guide: a URL target the server redirects to another page (a login page) exits 3 naming where the browser ended", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("redirect", {
+    "/route": [302, "", "/login"],
+    "/login": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css">')],
+    "/tokens.css": [200, "text/css", TOKENS],
+  });
+  const why = `unknown(redirected): ${r.url}/route was answered by ${r.url}/login; a verdict there is not a verdict on the target`;
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.lines, [`design-kit: ${why}`]);
+  assert.equal(r.report.unknown, why);
 });

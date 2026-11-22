@@ -196,6 +196,21 @@ export function guideJson(r: GuideReport | GuidePartial, exitCode: GuideJson["ex
   };
 }
 
+/**
+ * The page the door read is the page it was sent to: the same origin and path. A
+ * redirect (an expired --storage-state sent to the login page, a trailing slash
+ * added or dropped) ends on another page, and a verdict there is not about the target.
+ */
+function samePage(requested: string, read: string): boolean {
+  try {
+    const a = new URL(requested);
+    const b = new URL(read);
+    return a.origin === b.origin && a.pathname === b.pathname;
+  } catch {
+    return false;
+  }
+}
+
 export interface ValidateOptions {
   /** A Playwright storageState file for the door's browser context (an authed route). */
   storageState?: string;
@@ -218,6 +233,8 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
         { action: "getDesignSnapshot", payload: { limit: 1000 } },
         { action: "pageEvaluate", payload: { expression: canonicalizeExpression(pairs) } },
         { action: "pageEvaluate", payload: { expression: STYLESHEET_LOAD_EXPRESSION } },
+        // Read last, so a redirect at any point before it (server or client side) is seen.
+        { action: "pageEvaluate", payload: { expression: "location.href" } },
       ],
       opts.storageState ? { storageState: opts.storageState } : {},
     );
@@ -228,6 +245,11 @@ export async function validateGuide(guideFile: string, target: string, rootDir: 
       throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} gave no design snapshot (${run.stderr.slice(0, 160).replace(/\s+/g, " ")})`);
     }
     known.elements = snap.elements.length;
+    const readUrl = evalValue(run.lines[5]);
+    if (typeof readUrl !== "string") throw unknownVerdict(`unknown(instrument-cannot-read): ${run.instrument} did not say which page it read`);
+    if (!samePage(page.url, readUrl)) {
+      throw unknownVerdict(`unknown(redirected): ${target} was answered by ${readUrl}; a verdict there is not a verdict on the target`);
+    }
     // A missing sheet leaves the page on browser defaults: whatever the rules say about it is not about the design.
     const stylesheets = mergeStylesheetLoads(
       stylesheetLoad(evalValue(run.lines[0]), page.url, []),
