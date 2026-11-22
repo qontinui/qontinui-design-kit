@@ -219,3 +219,23 @@ test("validate-guide --json: an argument refused at parse time leaves no earlier
     p.cleanup();
   }
 });
+
+test("validate-guide --json naming the --storage-state file, or found behind an empty flag value, is refused and the input kept", async () => {
+  const p = stubDoorProject();
+  try {
+    const state = path.join(p.dir, "state.json");
+    const lines = [];
+    assert.equal(await main(["validate-guide", "guide.json", "http://127.0.0.1:9/page", "--root", p.dir, "--storage-state", "state.json", "--json", "state.json"], (s) => lines.push(s)), 2);
+    assert.deepEqual(lines, [`design-kit: --json ${state} is one of validate-guide's inputs; refusing to overwrite it`]);
+    assert.equal(fs.existsSync(state), true);
+
+    const page = path.join(p.dir, "page.html");
+    fs.writeFileSync(page, "<!doctype html><p>x</p>");
+    const shifted = [];
+    assert.equal(await main(["validate-guide", "--file", "", "guide.json", page, "--root", p.dir, "--json", page], (s) => shifted.push(s)), 2);
+    assert.deepEqual(shifted, [`design-kit: --json ${page} is one of validate-guide's inputs; refusing to overwrite it`]);
+    assert.equal(fs.existsSync(page), true);
+  } finally {
+    p.cleanup();
+  }
+});

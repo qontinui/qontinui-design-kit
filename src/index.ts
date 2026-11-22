@@ -10,7 +10,7 @@ export * as craft from "./craft/arithmetic.js";
 export { loadTokenPackage, tokenLeaves, TOKEN_PACKAGE } from "./adapters/design-tokens.js";
 
 // Phase 4: the guide, budgets and thresholds, the computed stage, the diff and the class lint.
-export { buildGuide, emitGuide, guideFileName, canonical, headingSizes, GUIDE_VERSION } from "./emit/guide.js";
+export { buildGuide, emitGuide, guideFileName, canonical, atRoot, headingSizes, GUIDE_VERSION } from "./emit/guide.js";
 export type { StyleGuideConfig, StyleRule, StyleConstraint, DesignTokens } from "./emit/guide.js";
 export { budgetEntries, emitBudgets, emitThresholds, UNDECLARED_IMAGERY_THRESHOLDS } from "./emit/budgets.js";
 export type { ThresholdEntry } from "./emit/budgets.js";

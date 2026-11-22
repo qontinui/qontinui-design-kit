@@ -194,7 +194,7 @@ function entriesFor(leaves: Leaf[]): Entry[] {
       if (!EMITTED_GROUPS.includes(t.group)) {
         throw new SourceError([`leaf ${owner.path}: alias {${field}} names a leaf in ${t.group}, which emits no CSS variable to read`]);
       }
-      const need = slot === null ? undefined : SHADOW_SLOT_TYPES[slot];
+      const need = slot !== null && Object.hasOwn(SHADOW_SLOT_TYPES, slot) ? SHADOW_SLOT_TYPES[slot] : undefined;
       if (need === undefined) throw new SourceError([`leaf ${owner.path}: alias {${field}} fills ${slot ?? "no field"}, which is not a shadow field`]);
       // Resolve first, so a broken or cyclic chain behind the target is named as such, not as a type mismatch.
       const value = resolveLeaf(t, trail).value;

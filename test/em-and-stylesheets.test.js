@@ -398,3 +398,26 @@ test("validate-guide: a stylesheet link with an empty href did not load; it is n
   assert.equal(r.code, 3);
   assert.deepEqual(r.report.stylesheets, { requested: 2, failed: ["<link with no href>"], unreadable: [], pending: [] });
 });
+
+// ---------------------------------------------------------------- review round 5
+
+test("validate-guide: an @import still loading when the page is read is unknown(stylesheet-pending)", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const late = "<script>addEventListener('load', () => { const st = document.createElement('style'); st.textContent = '@import url(/slow.css);'; document.head.appendChild(st); });</script>";
+  const r = await validateUrl("pending-import", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css">', late)],
+    "/tokens.css": [200, "text/css", TOKENS],
+  });
+  assert.equal(r.code, 3);
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: ["/slow.css"] });
+});
+
+test("validate-guide: a stylesheet link whose type is not text/css is never fetched, and is not counted", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const r = await validateUrl("lesslink", {
+    "/route": [200, "text/html", head('<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" type="text/less" href="/theme.less">')],
+    "/tokens.css": [200, "text/css", TOKENS],
+  });
+  assert.equal(r.code, 0, r.lines.join("\n"));
+  assert.deepEqual(r.report.stylesheets, { requested: 1, failed: [], unreadable: [], pending: [] });
+});

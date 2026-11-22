@@ -13,8 +13,9 @@
  *   is a sheet that did not load. Chromium gives both a non-null, empty `sheet`,
  *   so the timing entry is what catches them on a URL target. A link with no
  *   sheet despite a response is counted as not loaded too;
- * - a link with no sheet and no recorded response is `pending`: still loading,
- *   or blocked before any response. That is UNKNOWN, not a load failure;
+ * - a link or an `@import` with no sheet and no recorded response is `pending`:
+ *   still loading, or blocked before any response. That is UNKNOWN, not a load
+ *   failure;
  * - every `document.styleSheets` entry whose `cssRules` throws is `unreadable`:
  *   a sheet fetched without CORS from another origin (the link has no
  *   `crossorigin` attribute, or its server sends no
@@ -23,8 +24,10 @@
  * Limits: a cross-origin stylesheet fetched without CORS reports status 0 and no
  * content type, which say nothing; the resource timing buffer (250 entries by
  * default) can drop entries on a page that loads more resources than that,
- * leaving the kit server's own record as the only signal for a file target; and
- * the `@import`s of an unreadable sheet cannot be walked.
+ * leaving the kit server's own record as the only signal for a file target;
+ * the `@import`s of an unreadable sheet cannot be walked; sheets inside a shadow
+ * root are not read; and a sheet for another medium (`media="print"`) is read
+ * like any other, so its 404 makes the page UNKNOWN too.
  *
  * `validate-guide` and `check-states` read the same check.
  */
@@ -54,7 +57,8 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
   const failed = [];
   const pending = [];
   const unreadable = [];
-  const links = Array.from(document.querySelectorAll('link[rel~="stylesheet" i]')).filter((l) => !l.disabled);
+  // A disabled link has no sheet by design; one whose type is not CSS is never fetched. Neither is counted.
+  const links = Array.from(document.querySelectorAll('link[rel~="stylesheet" i]')).filter((l) => !l.disabled && (!l.type || l.type.trim().toLowerCase() === 'text/css'));
   for (const l of links) {
     // An empty href resolves to the page itself and never loads: a sheet that did not load, not one still loading.
     const raw = l.getAttribute('href');
@@ -72,8 +76,10 @@ export const STYLESHEET_LOAD_EXPRESSION = `(() => {
       if (!(r instanceof CSSImportRule)) continue;
       let href = r.href;
       try { href = new URL(r.href, sheet.href || document.baseURI).href; } catch (e) { /* keep as written */ }
-      if (badResponse(seen.get(href))) failed.push(href);
+      const i = seen.get(href);
+      if (badResponse(i)) failed.push(href);
       else if (r.styleSheet) walk(r.styleSheet, depth + 1);
+      else (i === undefined || i.code === 0 ? pending : failed).push(href);
     }
   };
   for (const s of Array.from(document.styleSheets)) walk(s, 0);

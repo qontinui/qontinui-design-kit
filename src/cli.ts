@@ -86,6 +86,18 @@ type Out = (s: string) => void;
 
 const COMMANDS = ["compile", "status", "diff", "lint-classes", "specimen", "check-states", "validate-guide", "index"];
 
+/** Two paths name one file: equal, or (both existing) the same device and inode, which a case-insensitive filesystem needs. */
+function samePath(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    const x = fs.statSync(a);
+    const y = fs.statSync(b);
+    return x.dev === y.dev && x.ino === y.ino;
+  } catch {
+    return false;
+  }
+}
+
 /** The options that take a value, so a scan of the raw argv can tell a value from a positional argument. */
 const VALUE_FLAGS = new Set(["--root", "--source", "--out", "--base", "--file", "--kit-dir", "--storage-state", "--json"]);
 
@@ -100,14 +112,18 @@ const VALUE_FLAGS = new Set(["--root", "--source", "--out", "--base", "--file", 
 function clearJsonReport(argv: string[], out: Out): number | null {
   let root = process.cwd();
   let json: string | null = null;
+  let storageState: string | null = null;
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const v = argv[i] as string;
     if (VALUE_FLAGS.has(v)) {
       const next = argv[i + 1];
-      if (next !== undefined && next !== "" && !next.startsWith("--")) {
+      // parseArgs refuses an empty value; skip it here too, so it is never read as a positional.
+      if (next === "") i++;
+      else if (next !== undefined && !next.startsWith("--")) {
         if (v === "--root") root = path.resolve(next);
         if (v === "--json") json = next;
+        if (v === "--storage-state") storageState = next;
         i++;
       }
     } else if (!v.startsWith("-")) positional.push(v);
@@ -115,8 +131,12 @@ function clearJsonReport(argv: string[], out: Out): number | null {
   if (positional[0] !== "validate-guide" || json === null) return null;
   const file = path.resolve(root, json);
   const [, guide, target] = positional;
-  const inputs = [guide ? path.resolve(root, guide) : null, target && !/^https?:\/\//.test(target) ? path.resolve(target) : null];
-  if (inputs.includes(file)) {
+  const inputs = [
+    guide ? path.resolve(root, guide) : null,
+    target && !/^https?:\/\//.test(target) ? path.resolve(target) : null,
+    storageState ? path.resolve(root, storageState) : null,
+  ].filter((f): f is string => f !== null);
+  if (inputs.some((f) => samePath(f, file))) {
     out(`design-kit: --json ${file} is one of validate-guide's inputs; refusing to overwrite it`);
     return 2;
   }

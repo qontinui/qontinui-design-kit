@@ -190,3 +190,11 @@ test("a shadow field alias naming a broken untyped alias is refused for the brea
     assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf color.a: alias {color.missing} names no leaf"]);
   }
 });
+
+// ---------------------------------------------------------------- review round 5
+
+test("an alias under a shadow key that is not a shadow field is refused naming the key, an inherited name included", async () => {
+  const r = await cli(glowSource({ offsetX: px(0), offsetY: px(0), blur: px(12), color: "#000000", toString: "{color.glow.primary}" }));
+  assert.equal(r.code, 2);
+  assert.deepEqual(r.lines, ["design-kit: the source was refused:\n  leaf space.depth.glow: alias {color.glow.primary} fills toString, which is not a shadow field"]);
+});
