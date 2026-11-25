@@ -6,7 +6,8 @@
  * Per cell: `changedProperties` (a count), whether each changed value is a
  * `var(--dk-*)` read (token-derived), and `complete`. A cell with no delta, or
  * a delta that is not token-derived, is a finding. `focus-visible` is not
- * emulated by the published door (Probe 3), so those cells are
+ * emulated by the published door at `@qontinui/ui-bridge` <0.56.0 (Probe 3;
+ * 0.56.0 emulates it, not yet used here), so those cells are
  * `unknown(focus-visible-not-emulated)`, never a pass.
  *
  * A state a pseudo-class can force (hover, active) is forced on the cell's

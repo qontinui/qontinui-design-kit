@@ -67,10 +67,6 @@ jobs:
         run: npm run lint
       - name: Test
         run: npm test
-      # The peer is a range (>=0.54.0 <1); the step above tests the 0.56.0
-      # devDependency, this one the floor the range claims.
-      - name: Test against the ui-bridge peer floor (0.54.0)
-        run: npm i --no-save @qontinui/ui-bridge@0.54.0 && npm test
       # The Phase 5 gate: the state check runs against the built specimen
       # through the published wrapper, and the generated guide is evaluated
       # over the same page (the first evaluator of a .styleguide.uibridge.json).
@@ -80,3 +76,16 @@ jobs:
           node dist/cli.js specimen --file .specimen/specimen.html
           node dist/cli.js check-states .specimen/specimen.html --file .specimen/state-coverage.json
           node dist/cli.js validate-guide .specimen/design/design-kit-specimen.styleguide.uibridge.json .specimen/specimen.html
+      # The peer is a range (>=0.54.0 <1); the Test step above runs the 0.56.0
+      # devDependency, this one the floor the range claims. It is LAST so no
+      # other step runs on the floor install, and it restores with npm ci.
+      - name: Test against the ui-bridge peer floor (0.54.0)
+        run: |
+          npm i --no-save @qontinui/ui-bridge@0.54.0
+          installed="$(node -p "require('@qontinui/ui-bridge/package.json').version")"
+          if [ "$installed" != "0.54.0" ]; then
+            echo "::error::peer-floor leg expected @qontinui/ui-bridge 0.54.0, found '$installed'"
+            exit 1
+          fi
+          npm test
+          npm ci

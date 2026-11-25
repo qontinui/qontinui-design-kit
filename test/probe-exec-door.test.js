@@ -5,6 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { ROOT } from "./helpers.js";
 import { runInject, serveDir, stateDiffs } from "./inject.js";
@@ -13,12 +14,13 @@ const PAGE = "states.html";
 
 // The installed @qontinui/ui-bridge (the peer is a range, >=0.54.0 <1; CI runs
 // this file against the 0.56.0 devDependency and the 0.54.0 floor). The
-// focus-visible behaviour of the door differs between the two.
+// door's focus-visible behaviour depends on it: measured 2026-11-25, 0.54.0
+// and 0.55.0 drop the request, 0.56.0 is the first version that emulates it.
 const UI_BRIDGE_VERSION = JSON.parse(
-  readFileSync(path.join(ROOT, "node_modules", "@qontinui", "ui-bridge", "package.json"), "utf8"),
+  readFileSync(createRequire(import.meta.url).resolve("@qontinui/ui-bridge/package.json"), "utf8"),
 ).version;
 const [uiBridgeMajor, uiBridgeMinor] = UI_BRIDGE_VERSION.split(".").map(Number);
-const EMULATES_FOCUS_VISIBLE = uiBridgeMajor > 0 || uiBridgeMinor >= 56;
+const FIRST_EMULATING_MINOR = 56;
 
 async function probe() {
   const server = await serveDir(path.join(ROOT, "test", "fixtures", "probe"));
@@ -47,6 +49,15 @@ test("exec door: forced hover and active report a non-empty change set; a rule-l
     return;
   }
   assert.ok(run.ok, `door exited ${run.code}: ${run.stderr}`);
+  // Fail loudly on a version this gate cannot read, rather than take an arm.
+  assert.ok(
+    Number.isInteger(uiBridgeMajor) && Number.isInteger(uiBridgeMinor),
+    `unparseable @qontinui/ui-bridge version: ${UI_BRIDGE_VERSION}`,
+  );
+  assert.equal(uiBridgeMajor, 0, `@qontinui/ui-bridge ${UI_BRIDGE_VERSION} is outside the peer range >=0.54.0 <1`);
+  const emulatesFocusVisible = uiBridgeMinor >= FIRST_EMULATING_MINOR;
+  t.diagnostic(`@qontinui/ui-bridge ${UI_BRIDGE_VERSION}: focus-visible ${emulatesFocusVisible ? "emulated" : "dropped"} arm`);
+  console.log(`probe-exec-door: @qontinui/ui-bridge ${UI_BRIDGE_VERSION} (focus-visible ${emulatesFocusVisible ? "emulated" : "dropped"} arm)`);
   const [, forced, plain, focusVisible, plainFocusVisible] = run.lines;
 
   const diffs = stateDiffs(forced);
@@ -60,7 +71,7 @@ test("exec door: forced hover and active report a non-empty change set; a rule-l
   assert.deepEqual(plainDiffs.hover, []);
   assert.deepEqual(plainDiffs.active, []);
 
-  // focus-visible. With @qontinui/ui-bridge 0.54.x the door's state
+  // focus-visible. With @qontinui/ui-bridge <0.56.0 the door's state
   // vocabulary is hover | focus | active | disabled: a `focus-visible` request
   // is dropped (only `default` comes back), recorded as
   // focus-visible-not-emulated. From 0.56.0 the door emulates it: the styled
@@ -68,13 +79,16 @@ test("exec door: forced hover and active report a non-empty change set; a rule-l
   // and the rule-less control reports the browser's default focus ring, not
   // the authored one. check-states still records every focus-visible cell as
   // unknown(focus-visible-not-emulated), which is true at the 0.54.0 floor.
-  if (EMULATES_FOCUS_VISIBLE) {
+  if (emulatesFocusVisible) {
     const fv = focusVisible.result.stateStyles.find((s) => s.state === "focus-visible");
     assert.ok(fv, `ui-bridge ${UI_BRIDGE_VERSION}: focus-visible not reported`);
     assert.deepEqual(fv.diffFromDefault.map((d) => d.property), ["outline"]);
     assert.match(fv.diffFromDefault[0].stateValue, /^2px solid rgb\(18, 52, 86\)$/);
     const plainFv = plainFocusVisible.result.stateStyles.find((s) => s.state === "focus-visible");
     assert.ok(plainFv, `ui-bridge ${UI_BRIDGE_VERSION}: focus-visible not reported on the control`);
+    // The control has no :focus-visible rule; it reports the browser's own
+    // ring (measured `1px auto rgb(16, 16, 16)`), never the authored one.
+    assert.deepEqual(plainFv.diffFromDefault.map((d) => d.property), ["outline"]);
     assert.doesNotMatch(plainFv.diffFromDefault.map((d) => d.stateValue).join(" "), /rgb\(18, 52, 86\)/);
   } else {
     assert.deepEqual(Object.keys(stateDiffs(focusVisible)), ["default"]);
