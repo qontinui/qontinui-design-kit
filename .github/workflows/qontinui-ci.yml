@@ -67,6 +67,10 @@ jobs:
         run: npm run lint
       - name: Test
         run: npm test
+      # The peer is a range (>=0.54.0 <1); the step above tests the 0.56.0
+      # devDependency, this one the floor the range claims.
+      - name: Test against the ui-bridge peer floor (0.54.0)
+        run: npm i --no-save @qontinui/ui-bridge@0.54.0 && npm test
       # The Phase 5 gate: the state check runs against the built specimen
       # through the published wrapper, and the generated guide is evaluated
       # over the same page (the first evaluator of a .styleguide.uibridge.json).

@@ -78,7 +78,7 @@ Craft bands (`src/craft/arithmetic.ts`, `draft`, listed in the report as `out_of
 
 `design-kit index` writes, between `<!-- design-kit-index:start -->` and `<!-- design-kit-index:end -->` in the project's `CLAUDE.md` (appended when there are no markers), one entry per component: its JSDoc summary and `@use` / `@avoid` notes, its props read from the TypeScript source or declarations (the compiler API), its variants and states from the component data, and the tokens it reads. `index --check` exits 1 on drift or missing markers; a hand edit between the markers is overwritten by the next `index`. The index of the slice is at most 8,192 bytes, asserted as a literal; a component that pushes it past the limit gets trimmed JSDoc, never a higher limit. `typescript` is a peer of this verb.
 
-Peers for the verbs that measure: `@qontinui/ui-bridge-wrapper@0.12.0`, `@qontinui/ui-bridge-headless@0.7.0`, `@qontinui/ui-bridge@0.54.0` and Playwright's Chromium (`npx playwright install chromium`). The tests that need Chromium skip locally with `unknown(instrument-cannot-force)` when it cannot run and fail under `CI`.
+Peers for the verbs that measure: `@qontinui/ui-bridge-wrapper` `>=0.12.0 <1`, `@qontinui/ui-bridge-headless` `>=0.7.0 <1`, `@qontinui/ui-bridge` `>=0.54.0 <1` (all optional; CI tests `0.56.0` and the `0.54.0` floor) and Playwright's Chromium (`npx playwright install chromium`). The tests that need Chromium skip locally with `unknown(instrument-cannot-force)` when it cannot run and fail under `CI`.
 
 ## Probe record (plan Phase 1), measured 2026-11-19
 
@@ -105,6 +105,14 @@ npm run typecheck && npm run lint && npm test
 `npm test` builds `dist/` first. The adapter tests build `@qontinui/design-tokens` at `415be45` from a clone of `$DESIGN_TOKENS_REPO` (a sibling `../qontinui-design-tokens` checkout, else GitHub) into `.dk-cache/`.
 
 ## Changelog
+
+### 0.2.1 (2026-11-25)
+
+Plan `2026-11-25-runner-kit-tool-and-template-pins-drift-from-the-kit-peer`, Phase 1. No verdict or API changes; only the peer declarations move:
+
+- **The UI Bridge peers are ranges, not exact versions.** `@qontinui/ui-bridge` `>=0.54.0 <1` (was `0.54.0`), `@qontinui/ui-bridge-headless` `>=0.7.0 <1` (was `0.7.0`), `@qontinui/ui-bridge-wrapper` `>=0.12.0 <1` (was `0.12.0`); all three stay optional. The consumer, not the kit, pins the exact tested combination: the runner's new-project template pins its own `@qontinui/ui-bridge` and its `design-guide` CI job runs `validate-guide` over exactly that version. With an exact `0.54.0` peer, every runner scaffold that pins `@qontinui/ui-bridge@0.56.0` failed `npm install` with `ERESOLVE`, and each runner floor bump would have needed a kit release first; with the range it does not.
+- **The devDependency `@qontinui/ui-bridge` is `0.56.0`** (was `0.54.0`). 0.56.0 changed the `@qontinui/ui-bridge/specs` validation order and colour grammar that `validate-guide` imports. CI runs the suite twice: against the `0.56.0` devDependency, then against the `0.54.0` floor (`npm i --no-save @qontinui/ui-bridge@0.54.0 && npm test`), so both ends of the range the kit claims are tested.
+- **Measured with 0.56.0 (2026-11-25): the exec door now emulates `focus-visible`.** Probe 3's assumption that a `focus-visible` request is dropped holds at 0.54.0 only. Under 0.56.0 the styled fixture button reports its authored `:focus-visible` outline and a rule-less control reports Chromium's default ring, so `test/probe-exec-door.test.js` asserts whichever behaviour the installed version has. `check-states` is unchanged: it still records every `focus-visible` cell as `unknown(focus-visible-not-emulated)`, which stays true at the 0.54.0 floor of the range.
 
 ### 0.2.0
 

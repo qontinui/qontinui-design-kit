@@ -1,6 +1,6 @@
 {
   "name": "@qontinui/design-kit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Design-language compiler, exclusive Tailwind v4 theme, state-complete component kit and specimen for Qontinui-built products",
   "type": "module",
   "private": false,
@@ -37,7 +37,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
-    "@qontinui/ui-bridge": "0.54.0",
+    "@qontinui/ui-bridge": "0.56.0",
     "@qontinui/ui-bridge-headless": "0.7.0",
     "@qontinui/ui-bridge-wrapper": "0.12.0",
     "@radix-ui/react-checkbox": "^1.4.1",
@@ -73,9 +73,9 @@
   },
   "homepage": "https://github.com/qontinui/qontinui-design-kit#readme",
   "peerDependencies": {
-    "@qontinui/ui-bridge": "0.54.0",
-    "@qontinui/ui-bridge-headless": "0.7.0",
-    "@qontinui/ui-bridge-wrapper": "0.12.0",
+    "@qontinui/ui-bridge": ">=0.54.0 <1",
+    "@qontinui/ui-bridge-headless": ">=0.7.0 <1",
+    "@qontinui/ui-bridge-wrapper": ">=0.12.0 <1",
     "@radix-ui/react-checkbox": "^1.4.1",
     "@radix-ui/react-dialog": "^1.3.1",
     "@radix-ui/react-select": "^2.4.1",
