@@ -131,9 +131,10 @@ export function conditionsOf(sources: readonly ConditionalSource[], leaves: read
     } catch (e) {
       // A bad value is a state of the condition, never a failed compile: a project whose kit names no
       // condition compiles whatever its bar and share hold, and one that does gets no rule, and the reason.
-      // Not so for the breakpoint's unit: a layout.breakpoint.* that is not a px, rem or em length is stored
+      // Not so for the breakpoint's unit: a layout.breakpoint.md that is not a px, rem or em length is stored
       // here as invalid, and the guide (emitGuide, later in the same compile) then refuses it with a
-      // SourceError, so the compile fails either way. A non-positive one is refused only here.
+      // SourceError, so the compile fails either way. The guide alone refuses a bad sm or lg breakpoint,
+      // which no condition reads. A non-positive md breakpoint is refused only here.
       if (!(e instanceof InvalidCondition)) throw e;
       out[c] = { state: "invalid", media: null, reason: e.message, rules, undeclared: [] };
     }
