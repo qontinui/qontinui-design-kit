@@ -49,7 +49,9 @@ export function themeVariable(path: string): string | null {
  * `theme.css`: an EXCLUSIVE Tailwind v4 theme. It begins `--*: initial`, which
  * removes every default (colours, type scale, breakpoints, the spacing base),
  * then re-defines the groups the source declares, each reading the
- * `--dk-*` property `tokens.css` carries. A group the source leaves undeclared
+ * `--dk-*` property `tokens.css` carries, except a breakpoint: Tailwind turns
+ * it into a media query, where `var()` never applies, so it is the source's
+ * literal value. A group the source leaves undeclared
  * defines nothing, so its utilities do not exist. Arbitrary values are NOT
  * stopped by a theme (Probe 1); `design-kit lint-classes` covers them.
  */
@@ -62,7 +64,9 @@ export function emitTheme(entries: Entry[]): string {
     const prior = seen.get(v);
     if (prior) throw new Error(`theme variable ${v} is produced by both ${prior} and ${e.path}`);
     seen.set(v, e.path);
-    lines.push(`  ${v}: var(${varName(e.path)});`);
+    // A breakpoint is a media condition, where a custom property never applies:
+    // `@media (width >= var(--dk-...))` is dead. So it is the source's literal.
+    lines.push(`  ${v}: ${e.path.startsWith("layout.breakpoint.") ? e.resolvedCss : `var(${varName(e.path)})`};`);
   }
   return `/* ${GENERATED_HEADER} */\n@theme inline {\n  --*: initial;\n${lines.join("\n")}${lines.length ? "\n" : ""}}\n`;
 }

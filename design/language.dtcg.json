@@ -287,6 +287,32 @@
           }
         }
       }
+    },
+    "shell": {
+      "bar": {
+        "$type": "dimension",
+        "$value": {
+          "value": 48,
+          "unit": "px"
+        },
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(design-kit-example-source)"
+          }
+        }
+      },
+      "sidebar": {
+        "$type": "dimension",
+        "$value": {
+          "value": 240,
+          "unit": "px"
+        },
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(design-kit-example-source)"
+          }
+        }
+      }
     }
   },
   "motion": {
@@ -337,6 +363,17 @@
       "max_text_blocks": {
         "$type": "number",
         "$value": 12,
+        "$extensions": {
+          "qontinui": {
+            "source": "authored(design-kit-example-source)"
+          }
+        }
+      }
+    },
+    "shell": {
+      "max_pinned_share": {
+        "$type": "number",
+        "$value": 0.1,
         "$extensions": {
           "qontinui": {
             "source": "authored(design-kit-example-source)"

@@ -7,9 +7,24 @@
 import type { ComponentDef } from "./define.js";
 
 export type Decls = Readonly<Record<string, string>>;
+
+/**
+ * The conditions a kit rule may be scoped to. A rule names its condition,
+ * never a value: the value is the project's own, and only the compiled
+ * `conditions.css` carries it (in an `@media` prelude).
+ * - `wide`: the viewport is at least the source's `layout.breakpoint.md`.
+ * - `short`: the viewport is shorter than `layout.shell.bar` divided by
+ *   `budgets.shell.max_pinned_share` (the pinned bar would take more than its
+ *   budgeted share of the height).
+ */
+export const CONDITIONS = ["wide", "short"] as const;
+export type Condition = (typeof CONDITIONS)[number];
+
 export interface Rule {
   selector: string;
   decls: Decls;
+  /** Scope the rule to a condition. Absent: unconditional (the kit's static stylesheet). */
+  when?: Condition;
 }
 export interface ComponentStyles {
   /** The UI Bridge element type the component's root interactive element reports (`button`, `input`, ...). */
@@ -28,8 +43,14 @@ export function statesRule(selector: string, def: ComponentDef): Rule {
   return { selector, decls: { [STATES_PROPERTY]: JSON.stringify(def.states.join(" ")) } };
 }
 
+/**
+ * The unconditional rules as CSS. A rule with `when` is not rendered here: it
+ * reaches a project only through the compiled `conditions.css`, so this text
+ * (and `kitCss()`) stays free of literals and of any project's values.
+ */
 export function renderRules(rules: readonly Rule[]): string {
   return rules
+    .filter((r) => r.when === undefined)
     .map((r) => `${r.selector} {\n${Object.entries(r.decls).map(([p, v]) => `  ${p}: ${v};`).join("\n")}\n}`)
     .join("\n");
 }

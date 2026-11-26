@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { TOKEN_PACKAGE, loadTokenPackage, tokenLeaves, type LoadContext } from "../adapters/design-tokens.js";
 import { budgetEntries, emitBudgets, emitThresholds } from "../emit/budgets.js";
+import { conditionUndeclared, conditionsOf, emitConditions, type ConditionalSource, type ConditionsReport } from "../emit/conditions.js";
 import { emitGuide, guideFileName } from "../emit/guide.js";
 import { varName } from "../emit/names.js";
 import { emitTheme } from "../emit/theme.js";
@@ -41,6 +42,11 @@ export interface CompileOptions {
   cacheDir?: string;
   /** `design/threshold-evidence.json`. Default: beside the source. Absent: every draft stays `draft`. */
   evidencePath?: string;
+  /**
+   * The kit entries whose conditional rules (`when: "wide" | "short"`)
+   * `conditions.css` renders. Default: the kit's own (`ALL`).
+   */
+  kit?: readonly ConditionalSource[];
 }
 
 export interface CompileReport {
@@ -59,6 +65,8 @@ export interface CompileReport {
   imports_shadowed: string[];
   out_of_band: OutOfBand[];
   next_undeclared_group: GroupName | null;
+  /** The kit's width and height conditions: each one's `@media` prelude from this source, or `undeclared`. */
+  conditions: ConditionsReport;
 }
 
 export interface CompileResult {
@@ -72,7 +80,15 @@ export interface CompileResult {
 }
 
 /** The fixed files `design-kit compile` writes; the guide is also written, named `<app>.styleguide.uibridge.json`. */
-export const OUTPUT_FILES = ["tokens.css", "tokens.ts", "theme.css", "compile-report.json", "design-budgets.json", "visual-system.thresholds.json"] as const;
+export const OUTPUT_FILES = [
+  "tokens.css",
+  "tokens.ts",
+  "theme.css",
+  "compile-report.json",
+  "design-budgets.json",
+  "visual-system.thresholds.json",
+  "conditions.css",
+] as const;
 
 const byPath = <T extends { path: string }>(a: T, b: T): number => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 
@@ -291,11 +307,15 @@ export async function compileSource(opts: CompileOptions): Promise<CompileResult
   const groups = classifyGroups(leaves);
   const stated = undeclaredLeaves(leaves);
   const statedPaths = new Set(stated.map((u) => u.path));
+  // Loaded only here, so a compile that is handed its kit never loads the components.
+  const kit = opts.kit ?? (await import("../kit/registry.js")).ALL;
+  const conditions = conditionsOf(kit, leaves, valueEntries);
   const undeclared = [
     ...stated,
     ...fallbacks
       .filter((f) => !/-(hover|active)$/.test(f.path) && !statedPaths.has(f.path))
       .map((f) => ({ path: f.path, reason: "identity role not stated or imported; renders as a platform keyword" })),
+    ...conditionUndeclared(conditions).filter((u) => !statedPaths.has(u.path)),
   ].sort(byPath);
 
   const report: CompileReport = {
@@ -317,6 +337,7 @@ export async function compileSource(opts: CompileOptions): Promise<CompileResult
     imports_shadowed: partial.imports_shadowed,
     out_of_band: outOfBand(entries, source),
     next_undeclared_group: nextUndeclaredGroup(groups),
+    conditions,
   };
 
   const evidencePath = opts.evidencePath ?? path.join(path.dirname(opts.sourcePath), "threshold-evidence.json");
@@ -330,6 +351,7 @@ export async function compileSource(opts: CompileOptions): Promise<CompileResult
     [guideFileName(source.name)]: emitGuide(source.name, entries),
     "design-budgets.json": emitBudgets(budgets.budgets),
     "visual-system.thresholds.json": emitThresholds(budgets.thresholds),
+    "conditions.css": emitConditions(kit, conditions),
   };
   return { outputs, report, leaves, entries };
 }

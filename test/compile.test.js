@@ -284,7 +284,8 @@ test("theme.css begins --*: initial and mints no class for a named utility outsi
     assert.ok(theme.includes("  --color-surface: var(--dk-color-role-surface);\n"));
     assert.ok(theme.includes("  --spacing: var(--dk-space-unit);\n"));
     assert.ok(theme.includes("  --radius-md: var(--dk-space-radius-md);\n"));
-    assert.ok(theme.includes("  --breakpoint-md: var(--dk-layout-breakpoint-md);\n"));
+    // A breakpoint is the source's literal: Tailwind writes it into a media query, where var() never applies.
+    assert.ok(theme.includes("  --breakpoint-md: 48rem;\n"));
     assert.ok(!theme.includes("--color-red"), "no default palette survives");
     assert.ok(theme.includes("  --color-palette-brand-primary: var(--dk-color-brand-primary);\n"), "a non-role colour cannot collide with a role");
 
@@ -304,6 +305,9 @@ test("theme.css begins --*: initial and mints no class for a named utility outsi
     assert.ok(classes.has("p-3"));
     assert.ok(classes.has("rounded-md"));
     assert.ok(classes.has("md:p-3"), "the breakpoint comes from the source, not from Tailwind");
+    // The md: variant's media condition is the source's literal value; the var() form would never apply.
+    assert.match(css, /@media \(width >= 48rem\)/);
+    assert.doesNotMatch(css, /@media[^{]*var\(/);
     assert.ok(!classes.has("bg-red-500"));
     assert.ok(!classes.has("text-lg"));
     // The theme alone does not stop a literal (Probe 1); Phase 4's lint-classes does.

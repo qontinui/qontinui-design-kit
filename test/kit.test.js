@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { ALL, COMPONENTS, defineComponent, kitCss, kitTokenContract, STATES } from "../dist/index.js";
+import { ALL, COMPONENTS, compileSource, defineComponent, kitCss, kitTokenContract, STATES } from "../dist/index.js";
+import { renderRules } from "../dist/kit/style.js";
+import { shellEntry } from "./fixtures/shell/styles.js";
 import { cellsOf } from "../dist/specimen/cells.js";
 import { checkStates } from "../dist/specimen/check-states.js";
 import { validateGuide } from "../dist/validate/guide.js";
@@ -14,7 +16,7 @@ import { main } from "../dist/cli.js";
 import http from "node:http";
 import { serveDir } from "../dist/door/inject.js";
 import { ROOT } from "./helpers.js";
-import { compileJson, exampleJson, needDoor, tmpDir, writeSpecimen } from "./kit-helpers.js";
+import { EXAMPLE_SOURCE, compileJson, exampleJson, needDoor, tmpDir, writeSpecimen } from "./kit-helpers.js";
 
 // ---------------------------------------------------------------- states as data
 
@@ -69,6 +71,48 @@ test("the kit ships no skin: no declaration carries a literal colour or length",
     "background-color: red",
     "border: 1px solid rgb(0, 0, 0)",
   ]);
+});
+
+// conditions.css: a literal length may appear only in an @media prelude, and
+// equal the source's value; no declaration carries one. The one admitted
+// extent is the viewport bound 100dvh (structure, not skin; plan D5). The
+// literal pattern is wider than LITERAL above: it also reads the viewport
+// units (dvh, svh, lvh, vmin, vmax), ch, ex and percentages.
+const ADMITTED_EXTENT = "100dvh";
+const STRICT_LITERAL = /#[0-9a-f]{3,8}\b|(?<![\w-])\d*\.?\d+(?:px|rem|em|ex|ch|dvh|svh|lvh|vh|vw|vmin|vmax|cm|mm|in|pt|pc|ms|s)\b|(?<![\w-])\d*\.?\d+%|\b(?:rgb|hsl|hsla|rgba|oklch|oklab|lab|lch)\(/i;
+
+/** { preludes, skin }: each @media prelude, and every declaration carrying a literal colour or length. */
+function conditionLiterals(css) {
+  const preludes = [...css.matchAll(/@media ([^{]+)\{/g)].map((m) => m[1].trim());
+  const body = css.replace(/@media [^{]+\{/g, "{").replace(/\/\*[\s\S]*?\*\//g, "");
+  const skin = [];
+  for (const m of body.matchAll(/([a-z-]+):\s*([^;]+);/g)) {
+    const value = m[2].split(ADMITTED_EXTENT).join("");
+    if (STRICT_LITERAL.test(value) || NAMED.test(value)) skin.push(`${m[1]}: ${m[2]}`);
+  }
+  return { preludes, skin };
+}
+
+test("conditions.css ships no skin: the source's literal appears only in @media preludes, never in a declaration", async () => {
+  const json = exampleJson();
+  const md = json.layout.breakpoint.md.$value;
+  const bar = json.layout.shell.bar.$value;
+  const share = json.budgets.shell.max_pinned_share.$value;
+  const c = await compileSource({ sourcePath: EXAMPLE_SOURCE, rootDir: ROOT, kit: [shellEntry] });
+  const { preludes, skin } = conditionLiterals(c.outputs["conditions.css"]);
+  // Each prelude's length equals the source's own value.
+  assert.deepEqual(preludes, [`(width >= ${md.value}${md.unit})`, `(height < ${bar.value / share}${bar.unit})`]);
+  assert.deepEqual(skin, []);
+  assert.ok(c.outputs["conditions.css"].includes("max-height: 100dvh;"), "the admitted extent is present, and admitted by name");
+  // The fixture's unconditional rules hold to the same rule.
+  assert.deepEqual(conditionLiterals(renderRules(shellEntry.styles.rules)).skin, []);
+
+  // Seeded violation: a conditional rule with a literal padding is reported.
+  const seeded = { def: { name: "Seeded" }, styles: { rules: [{ when: "wide", selector: ".x", decls: { padding: "12px" } }] } };
+  const bad = await compileSource({ sourcePath: EXAMPLE_SOURCE, rootDir: ROOT, kit: [seeded] });
+  assert.deepEqual(conditionLiterals(bad.outputs["conditions.css"]).skin, ["padding: 12px"]);
+  // And the admission is by name only: another viewport extent is reported.
+  assert.deepEqual(conditionLiterals("@media (width >= 768px) { .x { max-height: 90dvh; width: 50%; } }").skin, ["max-height: 90dvh", "width: 50%"]);
 });
 
 test("every token the kit reads is provided by the example source; a source missing a group is named", async () => {

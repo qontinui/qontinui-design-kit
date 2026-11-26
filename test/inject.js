@@ -33,10 +33,13 @@ export function serveDir(dir) {
 /**
  * Run NDJSON steps through the door. Resolves to
  * { ok, lines: [{action, result, error?}], stderr, code }.
+ * `viewport` ("WxH" in CSS pixels) only sizes the browser (`--viewport`);
+ * every scroll, focus and reading is a step through the Bridge.
  */
-export function runInject(url, steps, { timeoutMs = 120000 } = {}) {
+export function runInject(url, steps, { timeoutMs = 120000, viewport } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [BIN, "--url", url, "--exec-stdin", "--quiet"], {
+    const args = [BIN, "--url", url, "--exec-stdin", "--quiet", ...(viewport ? ["--viewport", viewport] : [])];
+    const child = spawn(process.execPath, args, {
       cwd: ROOT,
       stdio: ["pipe", "pipe", "pipe"],
     });

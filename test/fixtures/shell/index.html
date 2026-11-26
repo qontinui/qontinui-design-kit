@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shell conditions fixture</title>
+    <!-- The order a scaffold loads them: tokens, the unconditional rules, then conditions.css. -->
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="conditions.css" />
+  </head>
+  <body>
+    <div class="fx-shell" data-open="false">
+      <div class="fx-shell-top">
+        <div class="fx-shell-bar">
+          <button id="shell-menu" class="fx-shell-menu" type="button" aria-expanded="false" aria-controls="shell-nav">Menu</button>
+        </div>
+        <nav id="shell-nav" class="fx-shell-nav" aria-label="Main">
+        <a id="nav-1" class="fx-shell-entry" href="#e1">Overview</a>
+        <a id="nav-2" class="fx-shell-entry" href="#e2">Orders</a>
+        <a id="nav-3" class="fx-shell-entry" href="#e3">Products</a>
+        <a id="nav-4" class="fx-shell-entry" href="#e4">Customers</a>
+        <a id="nav-5" class="fx-shell-entry" href="#e5">Invoices</a>
+        <a id="nav-6" class="fx-shell-entry" href="#e6">Reports</a>
+        <a id="nav-7" class="fx-shell-entry" href="#e7">Users</a>
+        <a id="nav-8" class="fx-shell-entry" href="#e8">Settings</a>
+        </nav>
+      </div>
+      <main class="fx-shell-main">
+        <p>The first paragraph of a long page.</p>
+        <!-- Page content, not shell: the 4000 px body the plan names. -->
+        <div style="height: 1000px"></div>
+        <button id="body-control" type="button">A control in the body</button>
+        <div style="height: 3000px"></div>
+        <a id="page-end" href="#">The end of the page</a>
+      </main>
+    </div>
+    <script>
+      // The menu control opens and closes the navigation panel.
+      const shell = document.querySelector(".fx-shell");
+      const menu = document.getElementById("shell-menu");
+      menu.addEventListener("click", () => {
+        const open = shell.dataset.open !== "true";
+        shell.dataset.open = String(open);
+        menu.setAttribute("aria-expanded", String(open));
+      });
+    </script>
+  </body>
+</html>

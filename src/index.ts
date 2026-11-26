@@ -3,6 +3,9 @@ export const designKitName = "@qontinui/design-kit";
 
 export { compileSource, driftedOutputs, writeOutputs, OUTPUT_FILES } from "./compile/compile.js";
 export type { CompileOptions, CompileReport, CompileResult } from "./compile/compile.js";
+// The kit's width and height conditions, compiled per project into conditions.css.
+export { conditionsOf, emitConditions, CONDITION_LEAVES } from "./emit/conditions.js";
+export type { ConditionalSource, ConditionsReport, ConditionState } from "./emit/conditions.js";
 export { parseSource } from "./source/parse.js";
 export { SourceError, GROUPS } from "./source/schema.js";
 export type { DesignSource, Leaf, GroupName, SourceKind } from "./source/schema.js";
@@ -23,6 +26,8 @@ export type { Finding } from "./lint/classes.js";
 // Phase 5: states as data and the kit slice. Components are exported by name.
 export { defineComponent, STATES, variantsOf } from "./kit/define.js";
 export type { ComponentDef, State } from "./kit/define.js";
+export { CONDITIONS } from "./kit/style.js";
+export type { Condition, Rule } from "./kit/style.js";
 export { COMPONENTS, PATTERNS, ALL, kitCss, kitTokenContract, tokensOf } from "./kit/registry.js";
 export { Button } from "./kit/button.js";
 export type { ButtonProps } from "./kit/button.js";
