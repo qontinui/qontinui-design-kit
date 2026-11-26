@@ -75,10 +75,12 @@ test("the kit ships no skin: no declaration carries a literal colour or length",
 
 // conditions.css: a literal length may appear only in an @media prelude, and
 // equal the source's value; no declaration carries one. The one admitted
-// extent is the viewport bound 100dvh (structure, not skin; plan D5). The
+// extent is the viewport bound 100dvh (structure, not skin; plan D5), as a
+// whole token and only in a height or max-height declaration. The
 // literal pattern is wider than LITERAL above: it also reads the viewport
 // units (dvh, svh, lvh, vmin, vmax), ch, ex and percentages.
-const ADMITTED_EXTENT = "100dvh";
+const ADMITTED_EXTENT = /(?<![\d.])100dvh\b/g;
+const ADMITTED_IN = new Set(["height", "max-height"]);
 const STRICT_LITERAL = /#[0-9a-f]{3,8}\b|(?<![\w-])\d*\.?\d+(?:px|rem|em|ex|ch|dvh|svh|lvh|vh|vw|vmin|vmax|cm|mm|in|pt|pc|ms|s)\b|(?<![\w-])\d*\.?\d+%|\b(?:rgb|hsl|hsla|rgba|oklch|oklab|lab|lch)\(/i;
 
 /** { preludes, skin }: each @media prelude, and every declaration carrying a literal colour or length. */
@@ -87,7 +89,7 @@ function conditionLiterals(css) {
   const body = css.replace(/@media [^{]+\{/g, "{").replace(/\/\*[\s\S]*?\*\//g, "");
   const skin = [];
   for (const m of body.matchAll(/([a-z-]+):\s*([^;]+);/g)) {
-    const value = m[2].split(ADMITTED_EXTENT).join("");
+    const value = ADMITTED_IN.has(m[1]) ? m[2].replace(ADMITTED_EXTENT, "") : m[2];
     if (STRICT_LITERAL.test(value) || NAMED.test(value)) skin.push(`${m[1]}: ${m[2]}`);
   }
   return { preludes, skin };
@@ -113,6 +115,24 @@ test("conditions.css ships no skin: the source's literal appears only in @media 
   assert.deepEqual(conditionLiterals(bad.outputs["conditions.css"]).skin, ["padding: 12px"]);
   // And the admission is by name only: another viewport extent is reported.
   assert.deepEqual(conditionLiterals("@media (width >= 768px) { .x { max-height: 90dvh; width: 50%; } }").skin, ["max-height: 90dvh", "width: 50%"]);
+  // Only the whole token, and only in height or max-height: 1100dvh, 100.5dvh and 100dvh in a width are reported.
+  assert.deepEqual(conditionLiterals("@media (width >= 768px) { .x { max-height: 1100dvh; height: 100.100dvh; width: 100dvh; min-height: calc(100dvh - var(--dk-a)); } }").skin, [
+    "max-height: 1100dvh",
+    "height: 100.100dvh",
+    "width: 100dvh",
+    "min-height: calc(100dvh - var(--dk-a))",
+  ]);
+  assert.deepEqual(conditionLiterals("@media (width >= 768px) { .x { height: 100dvh; max-height: calc(100dvh - var(--dk-a)); } }").skin, []);
+
+  // The default kit (ALL) holds to the same rule. It names no condition yet, so this is a no-op until a
+  // kit component gains a `when` rule (the AppShell, Phase 3), from which point it guards the shipped file.
+  const plain = await compileSource({ sourcePath: EXAMPLE_SOURCE, rootDir: ROOT });
+  const shipped = conditionLiterals(plain.outputs["conditions.css"]);
+  assert.deepEqual(shipped.skin, []);
+  const expected = [];
+  if (plain.report.conditions.wide.rules > 0) expected.push(`(width >= ${md.value}${md.unit})`);
+  if (plain.report.conditions.short.rules > 0) expected.push(`(height < ${bar.value / share}${bar.unit})`);
+  assert.deepEqual(shipped.preludes, expected);
 });
 
 test("every token the kit reads is provided by the example source; a source missing a group is named", async () => {

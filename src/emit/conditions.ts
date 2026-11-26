@@ -15,7 +15,7 @@
 import type { Entry } from "../compile/model.js";
 import type { UndeclaredEntry } from "../compile/state.js";
 import { CONDITIONS, type Condition, type Rule } from "../kit/style.js";
-import { SourceError, type Leaf } from "../source/schema.js";
+import type { Leaf } from "../source/schema.js";
 import { isMeasured } from "../source/value.js";
 import { GENERATED_HEADER } from "./names.js";
 
@@ -32,10 +32,17 @@ export interface ConditionalSource {
 }
 
 export interface ConditionState {
-  /** `declared`: every leaf the condition needs is stated; `undeclared`: one is not, so no rule is emitted for it. */
-  state: "declared" | "undeclared";
-  /** The `@media` prelude, or null when undeclared. */
+  /**
+   * `declared`: every leaf the condition needs is stated with a usable value.
+   * `undeclared`: one is not stated. `invalid`: each is stated, but a value
+   * cannot make a condition (`reason` says which). Neither of the last two
+   * emits a rule, and neither fails the compile.
+   */
+  state: "declared" | "undeclared" | "invalid";
+  /** The `@media` prelude, or null when the condition is not `declared`. */
   media: string | null;
+  /** Why an `invalid` condition is invalid; null otherwise. */
+  reason: string | null;
   /** How many kit rules name this condition. */
   rules: number;
   /** The leaves the condition needs that the source does not state. */
@@ -46,12 +53,15 @@ export type ConditionsReport = Record<Condition, ConditionState>;
 
 const LENGTH = /^(-?\d*\.?\d+)([a-z%]+)$/;
 
+/** Thrown inside this module only: a stated value that cannot make a condition. Never leaves `conditionsOf`. */
+class InvalidCondition extends Error {}
+
 /** A dimension's number and unit, from its alias-resolved value. */
 function lengthOf(e: Entry): { value: number; unit: string } {
   if (isMeasured(e.value)) return e.value;
   const m = typeof e.value === "string" ? LENGTH.exec(e.value.trim()) : null;
   if (m) return { value: Number(m[1]), unit: m[2] as string };
-  throw new SourceError([`${e.path} is ${JSON.stringify(e.value)}; a condition needs a length with a unit`]);
+  throw new InvalidCondition(`${e.path} is ${JSON.stringify(e.value)}; a condition needs a length with a unit`);
 }
 
 /** Drop the float noise of a division (48 / 0.1) without rounding a real value. */
@@ -68,9 +78,9 @@ function prelude(c: Condition, entries: ReadonlyMap<string, Entry>, leaves: Read
       const bar = lengthOf(entries.get("layout.shell.bar") as Entry);
       const share = (leaves.get("budgets.shell.max_pinned_share") as Leaf).value;
       if (typeof share !== "number" || !(share > 0 && share <= 1)) {
-        throw new SourceError([`budgets.shell.max_pinned_share is ${JSON.stringify(share)}; it is a number above 0 and at most 1`]);
+        throw new InvalidCondition(`budgets.shell.max_pinned_share is ${JSON.stringify(share)}; it is a number above 0 and at most 1`);
       }
-      if (!(bar.value > 0)) throw new SourceError([`layout.shell.bar is ${bar.value}${bar.unit}; a pinned bar has a positive height`]);
+      if (!(bar.value > 0)) throw new InvalidCondition(`layout.shell.bar is ${bar.value}${bar.unit}; a pinned bar has a positive height`);
       return `@media (height < ${tidy(bar.value / share)}${bar.unit})`;
     }
   }
@@ -92,21 +102,30 @@ export function conditionsOf(sources: readonly ConditionalSource[], leaves: read
   for (const c of CONDITIONS) {
     const rules = sources.reduce((n, s) => n + s.styles.rules.filter((r) => r.when === c).length, 0);
     const undeclared = CONDITION_LEAVES[c].filter((p) => !stated(p, byEntry, byLeaf));
-    out[c] =
-      undeclared.length > 0
-        ? { state: "undeclared", media: null, rules, undeclared }
-        : { state: "declared", media: prelude(c, byEntry, byLeaf), rules, undeclared: [] };
+    if (undeclared.length > 0) {
+      out[c] = { state: "undeclared", media: null, reason: null, rules, undeclared };
+      continue;
+    }
+    try {
+      out[c] = { state: "declared", media: prelude(c, byEntry, byLeaf), reason: null, rules, undeclared: [] };
+    } catch (e) {
+      // A bad value is a state of the condition, never a failed compile: a project whose kit names no
+      // condition must compile whatever these leaves hold, and one that does gets no rule, and the reason.
+      if (!(e instanceof InvalidCondition)) throw e;
+      out[c] = { state: "invalid", media: null, reason: e.message, rules, undeclared: [] };
+    }
   }
   return out;
 }
 
-/** The leaves a condition some kit rule names needs and the source does not state, for `compile-report.json`. */
+/**
+ * Every leaf a condition needs that the source does not state, for
+ * `compile-report.json`, whether or not a kit rule names the condition yet.
+ */
 export function conditionUndeclared(report: ConditionsReport): UndeclaredEntry[] {
   const out: UndeclaredEntry[] = [];
   for (const c of CONDITIONS) {
-    const s = report[c];
-    if (s.rules === 0) continue;
-    for (const p of s.undeclared) out.push({ path: p, reason: `the kit's \`${c}\` condition needs it; conditions.css emits no \`${c}\` rule` });
+    for (const p of report[c].undeclared) out.push({ path: p, reason: `the kit's \`${c}\` condition needs it; conditions.css emits no \`${c}\` rule` });
   }
   return out;
 }
@@ -120,7 +139,7 @@ function ruleText(r: Rule, indent: string): string {
  * The stylesheet. Conditions are written in a fixed order (`wide`, then
  * `short`), so where both hold, a `short` rule wins over a `wide` rule of
  * equal specificity. A condition no rule names, or one the source leaves
- * undeclared, writes no `@media` block.
+ * undeclared or states with an invalid value, writes no `@media` block.
  */
 export function emitConditions(sources: readonly ConditionalSource[], report: ConditionsReport): string {
   const blocks: string[] = [];
@@ -128,7 +147,9 @@ export function emitConditions(sources: readonly ConditionalSource[], report: Co
     const s = report[c];
     if (s.rules === 0) continue;
     if (s.media === null) {
-      blocks.push(`/* ${c}: undeclared (${s.undeclared.join(", ")}); no rule emitted */`);
+      const why = s.state === "invalid" ? `invalid (${s.reason})` : `undeclared (${s.undeclared.join(", ")})`;
+      // A reason quotes a source value; keep it from closing the comment early.
+      blocks.push(`/* ${c}: ${why.split("*/").join("* /")}; no rule emitted */`);
       continue;
     }
     const body: string[] = [];

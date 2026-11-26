@@ -159,9 +159,15 @@ function tokensOf(entries: Entry[]): DesignTokens {
 
 const unique = (xs: string[]): string[] => [...new Set(xs)];
 
-/** The root class of a kit component: its first rule's selector, written by `statesRule`. */
+/**
+ * The root class of a kit component: the selector of its first unconditional
+ * rule, written by `statesRule`. A `when` rule is skipped: it reaches a page
+ * only through conditions.css, and never declares the state list.
+ */
 function rootClass(e: KitEntry): string {
-  return (e.styles.rules[0] as { selector: string }).selector;
+  const root = e.styles.rules.find((r) => r.when === undefined);
+  if (!root) throw new Error(`kit component ${e.def.name} has no unconditional rule to carry its root class`);
+  return root.selector;
 }
 
 export function buildGuide(name: string, entries: Entry[], kit: readonly KitEntry[] = COMPONENTS): StyleGuideConfig {

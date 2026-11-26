@@ -12,12 +12,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { compileSource, OUTPUT_FILES } from "../dist/index.js";
+import { buildGuide, COMPONENTS, compileSource, OUTPUT_FILES } from "../dist/index.js";
 import { renderRules } from "../dist/kit/style.js";
 import { ROOT, compileTailwind } from "./helpers.js";
 import { EXAMPLE_SOURCE, exampleJson, compileJson, needDoor, tmpDir } from "./kit-helpers.js";
 import { runInject, serveDir } from "./inject.js";
-import { inView, navReachAtDepth } from "./reach.js";
+import { atEndOf, inView, navReachAtDepth, pinnedHeight } from "./reach.js";
 import { shellEntry } from "./fixtures/shell/styles.js";
 
 const FIXTURE = path.join(ROOT, "test", "fixtures", "shell");
@@ -58,6 +58,43 @@ test("reach at depth: the helper passes the plan's vectors V1-V7", () => {
   });
   // Without the fixed arm the formula would read 6 for a bar that never leaves the view; an unknown is never a number.
   assert.equal(r({ H: 740, documentHeight: 3700, nav: { position: "fixed", top: 0, boxInViewport: false } }).reach, undefined);
+});
+
+test("reach at depth: a reading at the end that is out of view is a verdict, and no usable height is unknown", () => {
+  const r = (m) => navReachAtDepth(m);
+  // Above the viewport at the end (off-screen, top -3241), at 1280 x 800: ceil(3241 / 640) = 6, whatever its position.
+  for (const position of ["sticky", "static", "fixed"]) {
+    assert.deepEqual(r({ H: 800, documentHeight: 4089, nav: { position, top: 48, atEnd: { inView: false, top: -3241, reason: "off-screen" } } }), {
+      reach: 6,
+      steps: 6,
+      basis: "read-at-end",
+    });
+  }
+  // The same, behind a closed menu, with a 56 px top pin: ceil((56 + 3397) / (0.8 x 684)) = 7, plus the menu.
+  assert.deepEqual(r({ H: 740, documentHeight: 4137, pinTop: 56, nav: { position: "sticky", top: 0, behindMenu: true, atEnd: { inView: false, top: -3397, reason: "off-screen" } } }), {
+    reach: 7,
+    steps: 8,
+    basis: "read-at-end",
+  });
+  // The static arithmetic agrees with the end reading for the same page (V2's shape read at its end).
+  assert.equal(r({ H: 800, documentHeight: 2400, nav: { position: "static", top: 120, atEnd: { inView: false, top: -1480, reason: "off-screen" } } }).reach, 3);
+  // Out of view for a reason scrolling up does not settle: unknown, never 0.
+  assert.equal(r({ H: 800, documentHeight: 2400, nav: { position: "sticky", top: 0, atEnd: { inView: false, top: 0, reason: "no-layout" } } }).unknown, "input_missing");
+  assert.equal(r({ H: 800, documentHeight: 2400, nav: { position: "static", top: 0, atEnd: { inView: false, top: 0, reason: "occluded" } } }).unknown, "input_missing");
+  // No usable height: pins take the whole viewport, so a gesture moves nothing.
+  assert.equal(r({ H: 800, documentHeight: 2400, pinTop: 400, pinBottom: 400, nav: { position: "static", top: 120 } }).unknown, "input_missing");
+  assert.equal(r({ H: 800, documentHeight: 2400, pinTop: 500, pinBottom: 400, nav: { position: "static", top: 120 } }).unknown, "input_missing");
+});
+
+test("pinned height: only a pinned part at least W/2 wide counts; an unpinned control counts nothing", () => {
+  const el = (top, left, right, height = 48, reason) => ({ state: { inViewport: true, ...(reason ? { visibilityReason: reason } : {}), rect: { top, bottom: top + height, left, right } } });
+  // A full-width bar pinned at the top of a 360 px viewport.
+  assert.equal(pinnedHeight([{ start: el(0, 0, 360), end: el(0, 0, 360) }], 360).height, 48);
+  // Two touching 240 px sidebar rows at 1280: one part, 240 wide, under W/2.
+  const side = pinnedHeight([{ start: el(48, 0, 240), end: el(48, 0, 240) }, { start: el(96, 0, 240), end: el(96, 0, 240) }], 1280);
+  assert.deepEqual(side, { height: 0, parts: [{ width: 240, height: 96, counted: false }] });
+  // A control that moved with the page is not pinned.
+  assert.equal(pinnedHeight([{ start: el(0, 0, 360), end: el(-3000, 0, 360) }], 360).height, 0);
 });
 
 // ---------------------------------------------------------------- the compiled conditions
@@ -106,8 +143,9 @@ test("a source missing a leaf a condition needs emits no rule for it and lists t
     const u = r.report.undeclared.find((e) => e.path === "layout.shell.bar");
     assert.ok(u, "compile-report lists layout.shell.bar");
     assert.match(u.reason, /`short` condition/);
-    // The default kit names no condition, so nothing is reported for it.
-    assert.ok(!c.report.undeclared.some((e) => e.path === "layout.shell.bar"));
+    // Listed whether or not a kit rule names the condition yet: the default kit (no `when` rule) reports it too.
+    assert.equal(c.report.conditions.short.rules, 0);
+    assert.ok(c.report.undeclared.some((e) => e.path === "layout.shell.bar"), "the default-kit compile lists layout.shell.bar");
   } finally {
     c.cleanup();
   }
@@ -121,6 +159,46 @@ test("a source missing a leaf a condition needs emits no rule for it and lists t
   } finally {
     d.cleanup();
   }
+});
+
+test("a bad condition value is a condition state, never a failed compile, with the default kit or with rules", async () => {
+  const bad = [
+    ["a share above 1", (j) => (j.budgets.shell.max_pinned_share.$value = 2), /max_pinned_share is 2/],
+    ["a share of 0", (j) => (j.budgets.shell.max_pinned_share.$value = 0), /max_pinned_share is 0/],
+    ["a share that is an alias", (j) => (j.budgets.shell.max_pinned_share.$value = "{budgets.density.max_interactive_per_viewport}"), /max_pinned_share is "\{budgets/],
+    ["a null share", (j) => (j.budgets.shell.max_pinned_share.$value = null), /max_pinned_share is null/],
+    ["a bar that is not a length", (j) => (j.layout.shell.bar.$value = "auto"), /layout\.shell\.bar is "auto"/],
+  ];
+  for (const [what, mutate, reason] of bad) {
+    const json = exampleJson();
+    mutate(json);
+    // compileJson compiles with the default kit: before this, it threw a SourceError.
+    const c = await compileJson(json, "cond-invalid");
+    try {
+      assert.equal(c.report.conditions.short.state, "invalid", what);
+      assert.match(c.report.conditions.short.reason, reason, what);
+      assert.equal(c.report.conditions.short.media, null, what);
+      assert.equal(c.report.conditions.wide.state, "declared", `${what}: the other condition is untouched`);
+      const r = await compileSource({ sourcePath: c.sourcePath, rootDir: c.dir, kit: [shellEntry] });
+      const css = r.outputs["conditions.css"];
+      assert.doesNotMatch(css, /height </, `${what}: no short rule`);
+      assert.match(css, /\/\* short: invalid \(/, what);
+      assert.match(css, /@media \(width >= 768px\)/, `${what}: the wide rules still compile`);
+    } finally {
+      c.cleanup();
+    }
+  }
+});
+
+test("the guide takes a component's root class from its first unconditional rule, never a `when` rule", async () => {
+  const c = await compileSource({ sourcePath: EXAMPLE_SOURCE, rootDir: ROOT });
+  const button = COMPONENTS[0];
+  const root = button.styles.rules.find((x) => x.when === undefined).selector;
+  const conditionalFirst = { def: button.def, styles: { ...button.styles, rules: [{ when: "wide", selector: ".dk-conditional-first", decls: {} }, ...button.styles.rules] } };
+  const g = buildGuide("guide-root", c.entries, [conditionalFirst]);
+  const selectors = JSON.stringify(g.rules);
+  assert.ok(!selectors.includes(".dk-conditional-first"), "a when rule's selector is not the root class");
+  assert.ok(selectors.includes(JSON.stringify(root)), `the root class ${root} is used`);
 });
 
 // ---------------------------------------------------------------- the page, driven through the Bridge
@@ -166,7 +244,8 @@ const act = (name, id, action) => ({ name, action: "executeElementAction", paylo
 const scrollBy = (name, top) => ({ name, action: "pageScroll", payload: { top } });
 const DISCOVER = { name: "discover", action: "discover", payload: {} };
 // To the end of the page with the Bridge's page scroll (it clamps at the end), then read the end-of-page
-// element. Not scrollIntoView: on 0.54.0 it answers before the page has finished moving (measured 2026-11-26:
+// element. Not scrollIntoView: on @qontinui/ui-bridge 0.54.0 it answers before the page has finished moving
+// (measured 2026-11-26 in this repo's 0.54.0 floor-leg run, at 1280 x 800 on this fixture: pageScroll read
 // scrollY 2578, then 2642, on the way to 3289), so a reading taken next lands mid-scroll.
 const TO_END = [
   { name: "end", action: "pageScroll", payload: { top: 100000 } },
@@ -175,6 +254,7 @@ const TO_END = [
 const MENU = "dom-shell-menu";
 const FIRST = "dom-nav-1";
 const LAST = "dom-nav-8";
+const ENTRIES = Array.from({ length: 8 }, (_, i) => `dom-nav-${i + 1}`);
 const CONTROL = "dom-body-control";
 
 const box = (r) => r.state.rect;
@@ -194,10 +274,12 @@ test("1280 x 800, sidebar: scrolled to the end an entry is in view; nav_steps_at
     DISCOVER,
     get("first", FIRST),
     get("menu0", MENU),
+    ...ENTRIES.map((id) => get(`start:${id}`, id)),
     ...TO_END,
     scrollBy("at", 0),
     get("firstEnd", FIRST),
     get("menuEnd", MENU),
+    ...ENTRIES.map((id) => get(`end:${id}`, id)),
   ]);
   const scrollY = r.at.after.scrollY;
   assert.ok(scrollY > 3000, `the page scrolled to its end (scrollY ${scrollY})`);
@@ -205,14 +287,15 @@ test("1280 x 800, sidebar: scrolled to the end an entry is in view; nav_steps_at
   const reach = navReachAtDepth({
     H,
     documentHeight: scrollY + H,
-    nav: { position: r.firstEnd.state.computedStyles.position, top: box(r.first).top, behindMenu: !inView(r.first), atEnd: { inView: inView(r.firstEnd) } },
+    nav: { position: r.firstEnd.state.computedStyles.position, top: box(r.first).top, behindMenu: !inView(r.first), atEnd: atEndOf(r.firstEnd) },
   });
   assert.deepEqual(reach, { reach: 0, steps: 0, basis: "read-at-end" });
-  // The pinned part is a sidebar narrower than half the width, so it takes no first-screen height (density rule: a pin spans at least W/2).
-  assert.ok(box(r.first).right <= W / 2, `sidebar right ${box(r.first).right}`);
   assert.ok(!inView(r.menu0) && !inView(r.menuEnd), "no menu control at this width");
-  const pinnedHeight = 0;
-  record("wide-sidebar-end", `${W}x${H}`, { scrollY, entry: reading(r.firstEnd), nav_steps_at_depth: reach.steps, pinned_height: pinnedHeight });
+  // Measured: the pinned parts the controls show, and the height of those at least W/2 wide (the density rule).
+  const pinned = pinnedHeight([MENU, ...ENTRIES].map((id) => ({ start: id === MENU ? r.menu0 : r[`start:${id}`], end: id === MENU ? r.menuEnd : r[`end:${id}`] })), W);
+  assert.ok(pinned.parts.length > 0, `the sidebar is pinned: ${JSON.stringify(pinned)}`);
+  assert.equal(pinned.height, 0, `no pinned height on the first screen: ${JSON.stringify(pinned)}`);
+  record("wide-sidebar-end", `${W}x${H}`, { scrollY, entry: reading(r.firstEnd), nav_steps_at_depth: reach.steps, pinned_height: pinned.height, pinned_parts: pinned.parts });
 });
 
 test("360 x 740: scrolled to the end the menu control is in view; nav_steps_at_depth is 1; the bar is within its budget", async (t) => {
@@ -237,7 +320,7 @@ test("360 x 740: scrolled to the end the menu control is in view; nav_steps_at_d
   const reach = navReachAtDepth({
     H,
     documentHeight: scrollY + H,
-    nav: { position: r.menuEnd.state.computedStyles.position, top: box(r.menu0).top, behindMenu: !inView(r.first0), atEnd: { inView: inView(r.menuEnd) } },
+    nav: { position: r.menuEnd.state.computedStyles.position, top: box(r.menu0).top, behindMenu: !inView(r.first0), atEnd: atEndOf(r.menuEnd) },
   });
   assert.deepEqual(reach, { reach: 0, steps: 1, basis: "read-at-end" });
   // One step: opening the menu puts an entry in view.
