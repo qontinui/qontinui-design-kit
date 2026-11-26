@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { ALL, COMPONENTS, compileSource, defineComponent, kitCss, kitTokenContract, STATES } from "../dist/index.js";
+import { ALL, COMPONENTS, compileSource, computedLength, defineComponent, kitCss, kitTokenContract, STATES } from "../dist/index.js";
 import { renderRules } from "../dist/kit/style.js";
 import { shellEntry } from "./fixtures/shell/styles.js";
 import { cellsOf } from "../dist/specimen/cells.js";
@@ -103,7 +103,7 @@ test("conditions.css ships no skin: the source's literal appears only in @media 
   const c = await compileSource({ sourcePath: EXAMPLE_SOURCE, rootDir: ROOT, kit: [shellEntry] });
   const { preludes, skin } = conditionLiterals(c.outputs["conditions.css"]);
   // Each prelude's length equals the source's own value.
-  assert.deepEqual(preludes, [`(width >= ${md.value}${md.unit})`, `(height < ${bar.value / share}${bar.unit})`]);
+  assert.deepEqual(preludes, [`(width >= ${md.value}${md.unit})`, `(height < ${computedLength(bar.value / share)}${bar.unit})`]);
   assert.deepEqual(skin, []);
   assert.ok(c.outputs["conditions.css"].includes("max-height: 100dvh;"), "the admitted extent is present, and admitted by name");
   // The fixture's unconditional rules hold to the same rule.
@@ -131,7 +131,7 @@ test("conditions.css ships no skin: the source's literal appears only in @media 
   assert.deepEqual(shipped.skin, []);
   const expected = [];
   if (plain.report.conditions.wide.rules > 0) expected.push(`(width >= ${md.value}${md.unit})`);
-  if (plain.report.conditions.short.rules > 0) expected.push(`(height < ${bar.value / share}${bar.unit})`);
+  if (plain.report.conditions.short.rules > 0) expected.push(`(height < ${computedLength(bar.value / share)}${bar.unit})`);
   assert.deepEqual(shipped.preludes, expected);
 });
 

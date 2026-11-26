@@ -7,12 +7,12 @@
 // Every scroll, focus and reading goes through the UI Bridge exec door:
 // `executeElementAction` (scrollIntoView, focus, click), `pageScroll` and
 // `getElement`. Nothing reads the DOM around the Bridge.
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { buildGuide, COMPONENTS, compileSource, OUTPUT_FILES } from "../dist/index.js";
+import { buildGuide, COMPONENTS, compileSource, computedLength, OUTPUT_FILES } from "../dist/index.js";
 import { renderRules } from "../dist/kit/style.js";
 import { ROOT, compileTailwind } from "./helpers.js";
 import { EXAMPLE_SOURCE, exampleJson, compileJson, needDoor, tmpDir } from "./kit-helpers.js";
@@ -115,7 +115,7 @@ test("conditions.css carries the example source's own breakpoint and height cond
   const bar = src.layout.shell.bar.$value;
   const share = src.budgets.shell.max_pinned_share.$value;
   const preludes = [...css.matchAll(/^(@media [^{]+)\{/gm)].map((m) => m[1].trim());
-  assert.deepEqual(preludes, [`@media (width >= ${md.value}${md.unit})`, `@media (height < ${Number((bar.value / share).toFixed(4))}${bar.unit})`]);
+  assert.deepEqual(preludes, [`@media (width >= ${md.value}${md.unit})`, `@media (height < ${computedLength(bar.value / share)}${bar.unit})`]);
   assert.deepEqual(preludes, ["@media (width >= 768px)", "@media (height < 480px)"]);
   assert.equal(c.report.conditions.wide.state, "declared");
   assert.equal(c.report.conditions.short.rules, 3);
@@ -168,6 +168,18 @@ test("a bad condition value is a condition state, never a failed compile, with t
     ["a share that is an alias", (j) => (j.budgets.shell.max_pinned_share.$value = "{budgets.density.max_interactive_per_viewport}"), /max_pinned_share is "\{budgets/],
     ["a null share", (j) => (j.budgets.shell.max_pinned_share.$value = null), /max_pinned_share is null/],
     ["a bar that is not a length", (j) => (j.layout.shell.bar.$value = "auto"), /layout\.shell\.bar is "auto"/],
+    // A unit a media feature does not take: the browser would drop the whole query.
+    ["a bar in %", (j) => (j.layout.shell.bar.$value = { value: 48, unit: "%" }), /layout\.shell\.bar is \{"value":48,"unit":"%"\}; a condition needs a px, rem or em length/],
+    ["a bar with no unit", (j) => (j.layout.shell.bar.$value = { value: 48, unit: "" }), /layout\.shell\.bar is \{"value":48,"unit":""\}/],
+    ["a bar of 48foo", (j) => (j.layout.shell.bar.$value = "48foo"), /layout\.shell\.bar is "48foo"; a condition needs a px, rem or em length/],
+    [
+      "a quotient that is not a finite length",
+      (j) => {
+        j.layout.shell.bar.$value = { value: 1e308, unit: "px" };
+        j.budgets.shell.max_pinned_share.$value = 0.001;
+      },
+      /is Infinitypx; the height condition is a positive finite length/,
+    ],
   ];
   for (const [what, mutate, reason] of bad) {
     const json = exampleJson();
@@ -190,6 +202,39 @@ test("a bad condition value is a condition state, never a failed compile, with t
   }
 });
 
+test("a condition's lengths are emitted unrounded: the breakpoint as stated, the quotient at 12 significant digits", async () => {
+  const cases = [
+    // toFixed(4) made this `height < 0px`, a condition that never holds.
+    ["a bar of 1e-7px", (j) => (j.layout.shell.bar.$value = { value: 1e-7, unit: "px" }), "short", "@media (height < 0.000001px)"],
+    [
+      "47 / 0.3",
+      (j) => {
+        j.layout.shell.bar.$value = { value: 47, unit: "px" };
+        j.budgets.shell.max_pinned_share.$value = 0.3;
+      },
+      "short",
+      `@media (height < ${computedLength(47 / 0.3)}px)`,
+    ],
+    ["a breakpoint with six decimals", (j) => (j.layout.breakpoint.md.$value = { value: 48.123456, unit: "rem" }), "wide", "@media (width >= 48.123456rem)"],
+  ];
+  for (const [what, mutate, cond, media] of cases) {
+    const json = exampleJson();
+    mutate(json);
+    const c = await compileJson(json, "cond-precise");
+    try {
+      assert.equal(c.report.conditions[cond].state, "declared", what);
+      assert.equal(c.report.conditions[cond].media, media, what);
+      const r = await compileSource({ sourcePath: c.sourcePath, rootDir: c.dir, kit: [shellEntry] });
+      assert.ok(r.outputs["conditions.css"].includes(`${media} {`), `${what}: conditions.css carries ${media}`);
+    } finally {
+      c.cleanup();
+    }
+  }
+  // The formatter the expectation above shares with the emitter, read as literals.
+  assert.equal(computedLength(47 / 0.3), "156.666666667");
+  assert.equal(computedLength(48 / 0.1), "480");
+});
+
 test("the guide takes a component's root class from its first unconditional rule, never a `when` rule", async () => {
   const c = await compileSource({ sourcePath: EXAMPLE_SOURCE, rootDir: ROOT });
   const button = COMPONENTS[0];
@@ -204,6 +249,10 @@ test("the guide takes a component's root class from its first unconditional rule
 // ---------------------------------------------------------------- the page, driven through the Bridge
 
 let pagePromise;
+// The fixture's temp dir outlives each case (the page is compiled once); remove it after the last.
+after(async () => {
+  if (pagePromise) fs.rmSync((await pagePromise).dir, { recursive: true, force: true });
+});
 /** The fixture page: tokens, the unconditional rules, then conditions.css, served from a temp dir. */
 function shellPage() {
   pagePromise ??= (async () => {
@@ -244,9 +293,8 @@ const act = (name, id, action) => ({ name, action: "executeElementAction", paylo
 const scrollBy = (name, top) => ({ name, action: "pageScroll", payload: { top } });
 const DISCOVER = { name: "discover", action: "discover", payload: {} };
 // To the end of the page with the Bridge's page scroll (it clamps at the end), then read the end-of-page
-// element. Not scrollIntoView: on @qontinui/ui-bridge 0.54.0 it answers before the page has finished moving
-// (measured 2026-11-26 in this repo's 0.54.0 floor-leg run, at 1280 x 800 on this fixture: pageScroll read
-// scrollY 2578, then 2642, on the way to 3289), so a reading taken next lands mid-scroll.
+// element. Not scrollIntoView: on @qontinui/ui-bridge 0.54.0 it answers before the page has finished
+// moving, so a reading taken next lands mid-scroll.
 const TO_END = [
   { name: "end", action: "pageScroll", payload: { top: 100000 } },
   { name: "endEl", action: "getElement", payload: { id: "dom-page-end" } },
@@ -365,8 +413,9 @@ test("short viewports: at 360 x 320 the bar is not pinned, at 1280 x 400 the sid
     ...TO_END,
     get("menuEnd", MENU),
     // Back to the top with the Bridge's page scroll (it clamps at 0), then open the menu.
-    // Not scrollIntoView on the menu control: on 0.56.0 that answers NO_SCROLL_EFFECT for a
-    // control at the document's top although the page moved (measured 2026-11-26).
+    // Not scrollIntoView on the menu control: on 0.56.0 its answer for a control at the document's
+    // top is intermittent (NO_SCROLL_EFFECT although the page moved, in some runs on 2026-11-26),
+    // so the test does not depend on it.
     scrollBy("toTop", -100000),
     act("open", MENU, "click"),
     act("toLast", LAST, "scrollIntoView"),

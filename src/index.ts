@@ -4,7 +4,7 @@ export const designKitName = "@qontinui/design-kit";
 export { compileSource, driftedOutputs, writeOutputs, OUTPUT_FILES } from "./compile/compile.js";
 export type { CompileOptions, CompileReport, CompileResult } from "./compile/compile.js";
 // The kit's width and height conditions, compiled per project into conditions.css.
-export { conditionsOf, emitConditions, CONDITION_LEAVES } from "./emit/conditions.js";
+export { computedLength, conditionsOf, emitConditions, CONDITION_LEAVES } from "./emit/conditions.js";
 export type { ConditionalSource, ConditionsReport, ConditionState } from "./emit/conditions.js";
 export { parseSource } from "./source/parse.js";
 export { SourceError, GROUPS } from "./source/schema.js";

@@ -9,7 +9,7 @@ import type { Entry } from "../compile/model.js";
 import { SourceError } from "../source/schema.js";
 import { COMPONENTS, type KitEntry } from "../kit/registry.js";
 import { STATES_PROPERTY } from "../kit/style.js";
-import { GENERATED_HEADER, kebab } from "./names.js";
+import { GENERATED_HEADER, kebab, MEDIA_LENGTH, MEDIA_LENGTH_PHRASE } from "./names.js";
 
 export type StyleConstraint =
   | { type: "exact"; property: string; value: string }
@@ -117,7 +117,7 @@ function record(entries: Entry[], prefix: string, map: (e: Entry) => string = (e
 const lengthPx = (s: string): number | null => {
   // A bare 0 is a length in CSS (a media query takes `0`).
   if (/^-?0*\.?0+$/.test(s.trim())) return 0;
-  const m = /^(-?\d*\.?\d+)(px|rem|em)$/.exec(s.trim());
+  const m = MEDIA_LENGTH.exec(s.trim());
   if (!m) return null;
   const v = parseFloat(m[1] as string);
   return m[2] === "px" ? v : Math.round(v * 16 * 1000) / 1000;
@@ -138,7 +138,7 @@ function tokensOf(entries: Entry[]): DesignTokens {
     const v = canonical(e.resolvedCss);
     const n = lengthPx(v);
     // A source the guide cannot state is refused for every compile-based verb (compile, status, specimen, diff).
-    if (n === null) throw new SourceError([`${e.path} is ${v}; a guide breakpoint is a px, rem or em length`]);
+    if (n === null) throw new SourceError([`${e.path} is ${v}; a guide breakpoint is a ${MEDIA_LENGTH_PHRASE} length`]);
     breakpoints[nameAfter(e, "layout.breakpoint.")] = n;
   }
   return {

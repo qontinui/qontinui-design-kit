@@ -17,7 +17,7 @@ import type { UndeclaredEntry } from "../compile/state.js";
 import { CONDITIONS, type Condition, type Rule } from "../kit/style.js";
 import type { Leaf } from "../source/schema.js";
 import { isMeasured } from "../source/value.js";
-import { GENERATED_HEADER } from "./names.js";
+import { GENERATED_HEADER, MEDIA_LENGTH, MEDIA_LENGTH_PHRASE, MEDIA_LENGTH_UNITS } from "./names.js";
 
 /** The source leaves each condition is computed from. */
 export const CONDITION_LEAVES: Readonly<Record<Condition, readonly string[]>> = {
@@ -51,28 +51,42 @@ export interface ConditionState {
 
 export type ConditionsReport = Record<Condition, ConditionState>;
 
-const LENGTH = /^(-?\d*\.?\d+)([a-z%]+)$/;
+const UNITS: ReadonlySet<string> = new Set(MEDIA_LENGTH_UNITS);
 
 /** Thrown inside this module only: a stated value that cannot make a condition. Never leaves `conditionsOf`. */
 class InvalidCondition extends Error {}
 
-/** A dimension's number and unit, from its alias-resolved value. */
-function lengthOf(e: Entry): { value: number; unit: string } {
-  if (isMeasured(e.value)) return e.value;
-  const m = typeof e.value === "string" ? LENGTH.exec(e.value.trim()) : null;
-  if (m) return { value: Number(m[1]), unit: m[2] as string };
-  throw new InvalidCondition(`${e.path} is ${JSON.stringify(e.value)}; a condition needs a length with a unit`);
+/**
+ * A dimension's number (as `text`, written the way the source states it) and
+ * unit, from its alias-resolved value. Only a media-feature unit is a length
+ * here: any other (`%`, none, `48foo`) is a value the browser would drop the
+ * whole query for, so it is invalid rather than emitted.
+ */
+function lengthOf(e: Entry): { value: number; unit: string; text: string } {
+  const why = `${e.path} is ${JSON.stringify(e.value)}; a condition needs a ${MEDIA_LENGTH_PHRASE} length`;
+  if (isMeasured(e.value)) {
+    if (!UNITS.has(e.value.unit) || !Number.isFinite(e.value.value)) throw new InvalidCondition(why);
+    return { value: e.value.value, unit: e.value.unit, text: String(e.value.value) };
+  }
+  const m = typeof e.value === "string" ? MEDIA_LENGTH.exec(e.value.trim()) : null;
+  if (m) return { value: Number(m[1]), unit: m[2] as string, text: m[1] as string };
+  throw new InvalidCondition(why);
 }
 
-/** Drop the float noise of a division (48 / 0.1) without rounding a real value. */
-const tidy = (n: number): string => String(Number(n.toFixed(4)));
+/**
+ * A computed length, at 12 significant digits: enough to drop a division's
+ * float noise (48 / 0.1 is 480.00000000000006) without rounding a small real
+ * value away (1e-7 / 0.1 stays 0.000001). Tests format their expectations
+ * with this same function.
+ */
+export const computedLength = (n: number): string => String(Number(n.toPrecision(12)));
 
 function prelude(c: Condition, entries: ReadonlyMap<string, Entry>, leaves: ReadonlyMap<string, Leaf>): string {
   switch (c) {
     case "wide": {
       const bp = entries.get("layout.breakpoint.md") as Entry;
-      const { value, unit } = lengthOf(bp);
-      return `@media (width >= ${tidy(value)}${unit})`;
+      const { text, unit } = lengthOf(bp);
+      return `@media (width >= ${text}${unit})`;
     }
     case "short": {
       const bar = lengthOf(entries.get("layout.shell.bar") as Entry);
@@ -81,7 +95,11 @@ function prelude(c: Condition, entries: ReadonlyMap<string, Entry>, leaves: Read
         throw new InvalidCondition(`budgets.shell.max_pinned_share is ${JSON.stringify(share)}; it is a number above 0 and at most 1`);
       }
       if (!(bar.value > 0)) throw new InvalidCondition(`layout.shell.bar is ${bar.value}${bar.unit}; a pinned bar has a positive height`);
-      return `@media (height < ${tidy(bar.value / share)}${bar.unit})`;
+      const q = computedLength(bar.value / share);
+      if (!(Number(q) > 0 && Number.isFinite(Number(q)))) {
+        throw new InvalidCondition(`layout.shell.bar / budgets.shell.max_pinned_share is ${q}${bar.unit}; the height condition is a positive finite length`);
+      }
+      return `@media (height < ${q}${bar.unit})`;
     }
   }
 }
