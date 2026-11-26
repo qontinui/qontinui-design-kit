@@ -75,7 +75,7 @@ function lengthOf(e: Entry): { value: number; unit: string; text: string } {
 
 /**
  * A computed length, at 12 significant digits: enough to drop a division's
- * float noise (48 / 0.1 is 480.00000000000006) without rounding a small real
+ * float noise (47 / 0.3 is 156.66666666666669) without rounding a small real
  * value away (1e-7 / 0.1 stays 0.000001). Tests format their expectations
  * with this same function.
  */
@@ -131,8 +131,9 @@ export function conditionsOf(sources: readonly ConditionalSource[], leaves: read
     } catch (e) {
       // A bad value is a state of the condition, never a failed compile: a project whose kit names no
       // condition compiles whatever its bar and share hold, and one that does gets no rule, and the reason.
-      // Not so for the breakpoint's unit: the guide refuses a layout.breakpoint.* that is not a px, rem or
-      // em length with a SourceError (guide.ts tokensOf) before this runs. A non-positive one reaches here.
+      // Not so for the breakpoint's unit: a layout.breakpoint.* that is not a px, rem or em length is stored
+      // here as invalid, and the guide (emitGuide, later in the same compile) then refuses it with a
+      // SourceError, so the compile fails either way. A non-positive one is refused only here.
       if (!(e instanceof InvalidCondition)) throw e;
       out[c] = { state: "invalid", media: null, reason: e.message, rules, undeclared: [] };
     }

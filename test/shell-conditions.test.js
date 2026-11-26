@@ -224,7 +224,7 @@ test("a breakpoint at or below zero makes `wide` invalid (`width >= 0` would hol
   }
 });
 
-test("a breakpoint in a unit a media feature does not take is refused by the guide with a SourceError, before any condition", async (t) => {
+test("a breakpoint in a unit a media feature does not take is refused by the guide with a SourceError", async (t) => {
   const json = exampleJson();
   json.layout.breakpoint.md.$value = { value: 48, unit: "%" };
   const dir = tmpDir("cond-bp-unit");
@@ -330,9 +330,8 @@ const act = (name, id, action) => ({ name, action: "executeElementAction", paylo
 const scrollBy = (name, top) => ({ name, action: "pageScroll", payload: { top } });
 const DISCOVER = { name: "discover", action: "discover", payload: {} };
 // To the end of the page with the Bridge's page scroll (it clamps at the end), then read the end-of-page
-// element. Not scrollIntoView: on @qontinui/ui-bridge 0.54.0 it was observed to answer before the page had
-// finished moving, so a reading taken next landed mid-scroll (observed during development in this worktree's
-// 0.54.0 floor-leg run, 2026-11-26).
+// element, so the end is asserted by the reading itself. Not scrollIntoView: the test does not depend on when
+// that action answers relative to the page's own scroll.
 const TO_END = [
   { name: "end", action: "pageScroll", payload: { top: 100000 } },
   { name: "endEl", action: "getElement", payload: { id: "dom-page-end" } },
@@ -451,9 +450,8 @@ test("short viewports: at 360 x 320 the bar is not pinned, at 1280 x 400 the sid
     ...TO_END,
     get("menuEnd", MENU),
     // Back to the top with the Bridge's page scroll (it clamps at 0), then open the menu.
-    // Not scrollIntoView on the menu control: on 0.56.0 it answered NO_SCROLL_EFFECT for a control at
-    // the document's top although the page moved (observed intermittently by two runs on 2026-11-26; not
-    // deterministic), so the test does not depend on it.
+    // Not scrollIntoView on the menu control: the test does not depend on that action's answer for a
+    // control already at the document's top.
     scrollBy("toTop", -100000),
     act("open", MENU, "click"),
     act("toLast", LAST, "scrollIntoView"),
