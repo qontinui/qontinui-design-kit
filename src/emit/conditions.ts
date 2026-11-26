@@ -85,7 +85,9 @@ function prelude(c: Condition, entries: ReadonlyMap<string, Entry>, leaves: Read
   switch (c) {
     case "wide": {
       const bp = entries.get("layout.breakpoint.md") as Entry;
-      const { text, unit } = lengthOf(bp);
+      const { value, text, unit } = lengthOf(bp);
+      // `width >= 0` (or less) holds at every width: the wide rules would apply everywhere.
+      if (!(value > 0)) throw new InvalidCondition(`layout.breakpoint.md is ${text}${unit}; a breakpoint is a positive width`);
       return `@media (width >= ${text}${unit})`;
     }
     case "short": {
@@ -128,7 +130,9 @@ export function conditionsOf(sources: readonly ConditionalSource[], leaves: read
       out[c] = { state: "declared", media: prelude(c, byEntry, byLeaf), reason: null, rules, undeclared: [] };
     } catch (e) {
       // A bad value is a state of the condition, never a failed compile: a project whose kit names no
-      // condition must compile whatever these leaves hold, and one that does gets no rule, and the reason.
+      // condition compiles whatever its bar and share hold, and one that does gets no rule, and the reason.
+      // Not so for the breakpoint's unit: the guide refuses a layout.breakpoint.* that is not a px, rem or
+      // em length with a SourceError (guide.ts tokensOf) before this runs. A non-positive one reaches here.
       if (!(e instanceof InvalidCondition)) throw e;
       out[c] = { state: "invalid", media: null, reason: e.message, rules, undeclared: [] };
     }

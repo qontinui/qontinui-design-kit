@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { buildGuide, COMPONENTS, compileSource, computedLength, OUTPUT_FILES } from "../dist/index.js";
+import { buildGuide, COMPONENTS, compileSource, computedLength, OUTPUT_FILES, SourceError } from "../dist/index.js";
 import { renderRules } from "../dist/kit/style.js";
 import { ROOT, compileTailwind } from "./helpers.js";
 import { EXAMPLE_SOURCE, exampleJson, compileJson, needDoor, tmpDir } from "./kit-helpers.js";
@@ -202,6 +202,43 @@ test("a bad condition value is a condition state, never a failed compile, with t
   }
 });
 
+test("a breakpoint at or below zero makes `wide` invalid (`width >= 0` would hold at every width); the rest compiles", async () => {
+  for (const [what, bp, text] of [
+    ["a negative breakpoint", { value: -5, unit: "px" }, "-5px"],
+    ["a zero breakpoint", { value: 0, unit: "rem" }, "0rem"],
+  ]) {
+    const json = exampleJson();
+    json.layout.breakpoint.md.$value = bp;
+    const c = await compileJson(json, "cond-bp-nonpositive");
+    try {
+      assert.equal(c.report.conditions.wide.state, "invalid", what);
+      assert.equal(c.report.conditions.wide.reason, `layout.breakpoint.md is ${text}; a breakpoint is a positive width`, what);
+      assert.equal(c.report.conditions.short.state, "declared", `${what}: the other condition is untouched`);
+      const r = await compileSource({ sourcePath: c.sourcePath, rootDir: c.dir, kit: [shellEntry] });
+      const css = r.outputs["conditions.css"];
+      assert.doesNotMatch(css, /width >=/, `${what}: no wide rule`);
+      assert.match(css, /\/\* wide: invalid \(/, what);
+    } finally {
+      c.cleanup();
+    }
+  }
+});
+
+test("a breakpoint in a unit a media feature does not take is refused by the guide with a SourceError, before any condition", async (t) => {
+  const json = exampleJson();
+  json.layout.breakpoint.md.$value = { value: 48, unit: "%" };
+  const dir = tmpDir("cond-bp-unit");
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(dir, "design"));
+  const sourcePath = path.join(dir, "design", "language.dtcg.json");
+  fs.writeFileSync(sourcePath, JSON.stringify(json));
+  await assert.rejects(compileSource({ sourcePath, rootDir: dir, kit: [shellEntry] }), (e) => {
+    assert.ok(e instanceof SourceError, `a SourceError, not ${e?.constructor?.name}`);
+    assert.match(e.message, /layout\.breakpoint\.md is 48%; a guide breakpoint is a px, rem or em length/);
+    return true;
+  });
+});
+
 test("a condition's lengths are emitted unrounded: the breakpoint as stated, the quotient at 12 significant digits", async () => {
   const cases = [
     // toFixed(4) made this `height < 0px`, a condition that never holds.
@@ -293,8 +330,9 @@ const act = (name, id, action) => ({ name, action: "executeElementAction", paylo
 const scrollBy = (name, top) => ({ name, action: "pageScroll", payload: { top } });
 const DISCOVER = { name: "discover", action: "discover", payload: {} };
 // To the end of the page with the Bridge's page scroll (it clamps at the end), then read the end-of-page
-// element. Not scrollIntoView: on @qontinui/ui-bridge 0.54.0 it answers before the page has finished
-// moving, so a reading taken next lands mid-scroll.
+// element. Not scrollIntoView: on @qontinui/ui-bridge 0.54.0 it was observed to answer before the page had
+// finished moving, so a reading taken next landed mid-scroll (observed during development in this worktree's
+// 0.54.0 floor-leg run, 2026-11-26).
 const TO_END = [
   { name: "end", action: "pageScroll", payload: { top: 100000 } },
   { name: "endEl", action: "getElement", payload: { id: "dom-page-end" } },
@@ -413,9 +451,9 @@ test("short viewports: at 360 x 320 the bar is not pinned, at 1280 x 400 the sid
     ...TO_END,
     get("menuEnd", MENU),
     // Back to the top with the Bridge's page scroll (it clamps at 0), then open the menu.
-    // Not scrollIntoView on the menu control: on 0.56.0 its answer for a control at the document's
-    // top is intermittent (NO_SCROLL_EFFECT although the page moved, in some runs on 2026-11-26),
-    // so the test does not depend on it.
+    // Not scrollIntoView on the menu control: on 0.56.0 it answered NO_SCROLL_EFFECT for a control at
+    // the document's top although the page moved (observed intermittently by two runs on 2026-11-26; not
+    // deterministic), so the test does not depend on it.
     scrollBy("toTop", -100000),
     act("open", MENU, "click"),
     act("toLast", LAST, "scrollIntoView"),

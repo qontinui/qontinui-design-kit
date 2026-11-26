@@ -22,6 +22,7 @@ import {
 import { aliasTarget, cssValue } from "../source/value.js";
 import { outOfBand, type OutOfBand } from "./bands.js";
 import type { Entry } from "./model.js";
+import { ALL } from "../kit/registry.js";
 import { COLOR_ROLES, FONT_FAMILY_ROLES, STATE_MIX } from "./roles.js";
 import {
   classifyGroups,
@@ -307,8 +308,7 @@ export async function compileSource(opts: CompileOptions): Promise<CompileResult
   const groups = classifyGroups(leaves);
   const stated = undeclaredLeaves(leaves);
   const statedPaths = new Set(stated.map((u) => u.path));
-  // Loaded only here, so a compile that is handed its kit never loads the components.
-  const kit = opts.kit ?? (await import("../kit/registry.js")).ALL;
+  const kit = opts.kit ?? ALL;
   const conditions = conditionsOf(kit, leaves, valueEntries);
   const undeclared = [
     ...stated,
