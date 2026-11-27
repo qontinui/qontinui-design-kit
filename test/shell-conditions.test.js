@@ -121,10 +121,11 @@ test("conditions.css carries the example source's own breakpoint and height cond
   assert.equal(c.report.conditions.short.rules, 3);
   // wide is written before short, so where both hold a short rule wins at equal specificity.
   assert.ok(css.indexOf("/* wide */") < css.indexOf("/* short */"));
-  // The default kit names no condition yet (the AppShell is Phase 3): the file is its header only.
+  // The default kit names both conditions through the AppShell (Phase 3), under the same preludes.
   const plain = await compileSource({ sourcePath: EXAMPLE_SOURCE, rootDir: ROOT });
-  assert.doesNotMatch(plain.outputs["conditions.css"], /@media/);
-  assert.equal(plain.report.conditions.wide.rules, 0);
+  assert.deepEqual([...plain.outputs["conditions.css"].matchAll(/^(@media [^{]+)\{/gm)].map((m) => m[1].trim()), ["@media (width >= 768px)", "@media (height < 480px)"]);
+  assert.match(plain.outputs["conditions.css"], /\/\* AppShell \*\//);
+  assert.ok(plain.report.conditions.wide.rules > 0 && plain.report.conditions.short.rules > 0);
 });
 
 test("a source missing a leaf a condition needs emits no rule for it and lists the leaf undeclared; no default is filled in", async () => {
@@ -143,8 +144,10 @@ test("a source missing a leaf a condition needs emits no rule for it and lists t
     const u = r.report.undeclared.find((e) => e.path === "layout.shell.bar");
     assert.ok(u, "compile-report lists layout.shell.bar");
     assert.match(u.reason, /`short` condition/);
-    // Listed whether or not a kit rule names the condition yet: the default kit (no `when` rule) reports it too.
-    assert.equal(c.report.conditions.short.rules, 0);
+    // The default kit (the AppShell's `short` rules) reports it too, and emits none of those rules.
+    assert.ok(c.report.conditions.short.rules > 0);
+    assert.equal(c.report.conditions.short.media, null);
+    assert.doesNotMatch(c.outputs["conditions.css"], /height </);
     assert.ok(c.report.undeclared.some((e) => e.path === "layout.shell.bar"), "the default-kit compile lists layout.shell.bar");
   } finally {
     c.cleanup();

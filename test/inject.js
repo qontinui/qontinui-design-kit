@@ -19,7 +19,8 @@ export function serveDir(dir) {
         res.end("not found");
         return;
       }
-      const type = file.endsWith(".html") ? "text/html" : file.endsWith(".css") ? "text/css" : "application/octet-stream";
+      // A module script is refused unless it is served with a JavaScript type (the AppShell page hydrates).
+      const type = file.endsWith(".html") ? "text/html" : file.endsWith(".css") ? "text/css" : file.endsWith(".js") ? "text/javascript" : "application/octet-stream";
       res.setHeader("content-type", type);
       res.end(fs.readFileSync(file));
     });

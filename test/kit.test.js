@@ -33,10 +33,10 @@ test("defineComponent stores states as data from the closed list and refuses any
   assert.throws(() => defineComponent({ name: "Chip", props: { variant: [] }, states: ["default"] }), /variant axis variant has no values/);
 });
 
-test("the slice is eight components and one pattern, with the states of the plan", () => {
+test("the slice is eight components and two patterns, with the states of the plan", () => {
   assert.equal(COMPONENTS.length, 8);
   assert.deepEqual(COMPONENTS.map((e) => e.def.name), ["Button", "TextInput", "Select", "Checkbox", "Switch", "Tabs", "Dialog", "DataTable"]);
-  assert.deepEqual(ALL.map((e) => e.def.name).slice(8), ["RecordListPage"]);
+  assert.deepEqual(ALL.map((e) => e.def.name).slice(8), ["RecordListPage", "AppShell"]);
   assert.deepEqual([...COMPONENTS[0].def.states], ["default", "hover", "focus-visible", "active", "disabled", "loading"]);
   assert.deepEqual(COMPONENTS[0].def.props, { variant: ["primary", "secondary", "quiet"] });
   // Every interactive control renders disabled visibly different from enabled: its disabled state is in its data.
@@ -124,8 +124,7 @@ test("conditions.css ships no skin: the source's literal appears only in @media 
   ]);
   assert.deepEqual(conditionLiterals("@media (width >= 768px) { .x { height: 100dvh; max-height: calc(100dvh - var(--dk-a)); } }").skin, []);
 
-  // The default kit (ALL) holds to the same rule. It names no condition yet, so this is a no-op until a
-  // kit component gains a `when` rule (the AppShell, Phase 3), from which point it guards the shipped file.
+  // The default kit (ALL) holds to the same rule: the AppShell's `wide` and `short` rules are the shipped file.
   const plain = await compileSource({ sourcePath: EXAMPLE_SOURCE, rootDir: ROOT });
   const shipped = conditionLiterals(plain.outputs["conditions.css"]);
   assert.deepEqual(shipped.skin, []);
@@ -133,6 +132,7 @@ test("conditions.css ships no skin: the source's literal appears only in @media 
   if (plain.report.conditions.wide.rules > 0) expected.push(`(width >= ${md.value}${md.unit})`);
   if (plain.report.conditions.short.rules > 0) expected.push(`(height < ${computedLength(bar.value / share)}${bar.unit})`);
   assert.deepEqual(shipped.preludes, expected);
+  assert.ok(plain.report.conditions.wide.rules > 0 && plain.report.conditions.short.rules > 0, "the kit names both conditions");
 });
 
 test("every token the kit reads is provided by the example source; a source missing a group is named", async () => {
@@ -193,7 +193,10 @@ test("the specimen renders components x variants x states cells equal to the dat
     assert.match(sp.html, /<html lang="en" data-design-identity="undeclared">/);
     assert.match(sp.html, /id="identity-banner"/);
     assert.match(sp.html, /id="board"/);
-    assert.equal((sp.html.match(/data-pattern-state="/g) ?? []).length, 5);
+    // Five RecordListPage states and the two AppShell variants.
+    assert.equal((sp.html.match(/data-pattern-state="/g) ?? []).length, 7);
+    assert.match(sp.html, /data-pattern-state="sidebar"/);
+    assert.match(sp.html, /data-pattern-state="topbar"/);
     const embedded = JSON.parse(/<script type="application\/json" id="dk-specimen-cells">([\s\S]*?)<\/script>/.exec(sp.html)[1]);
     assert.deepEqual(embedded, cellsOf());
     // Every colour in the board reads a token; the page has no literal colour of its own.

@@ -2,6 +2,7 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Entry } from "../compile/model.js";
 import { varName } from "../emit/names.js";
+import { AppShell, type AppShellSection } from "../kit/app-shell.js";
 import { RecordListPage } from "../kit/record-list-page.js";
 import { COMPONENTS, kitCss } from "../kit/registry.js";
 import { t } from "../kit/style.js";
@@ -31,6 +32,7 @@ const CHROME_CSS = `
 .sp-cell-label { margin: 0 0 ${t("space-scale-2")}; color: ${t("color-role-muted")}; font-size: ${t("type-scale-sm")}; }
 .sp-swatch { display: inline-block; box-sizing: border-box; width: ${t("space-scale-6")}; height: ${t("space-scale-6")}; border: ${t("space-border-width")} solid ${t("color-role-border")}; vertical-align: middle; margin-right: ${t("space-scale-2")}; }
 .sp-row { margin: ${t("space-scale-1")} 0; }
+.sp-shell-frame { contain: layout paint; height: calc(${t("space-scale-6")} * 8); overflow: auto; border: ${t("space-border-width")} solid ${t("color-role-border")}; }
 .sp-bar { display: inline-block; height: ${t("space-scale-2")}; background-color: ${t("color-role-text")}; vertical-align: middle; margin-right: ${t("space-scale-2")}; }
 `;
 
@@ -114,6 +116,41 @@ function Patterns(): React.ReactElement {
   );
 }
 
+const SHELL_SECTIONS: readonly AppShellSection[] = [
+  { id: "work", label: "Work", entries: [{ id: "orders", label: "Orders", href: "#orders" }, { id: "reports", label: "Reports", href: "#reports" }] },
+  { id: "admin", label: "Admin", entries: [{ id: "users", label: "Users", href: "#users", requires: "users.manage", whenDenied: "disable", reason: "Owners only" }] },
+];
+
+/** AppShell in each variant, in its narrow form (the specimen loads no conditions.css), framed so its fixed bar stays in the cell. */
+function Shells(): React.ReactElement {
+  return (
+    <section className="sp-section" id="shells" aria-label="App shell">
+      <h2>AppShell</h2>
+      <div className="sp-grid">
+        {(["sidebar", "topbar"] as const).map((variant) => (
+          <div className="sp-cell" key={variant} data-pattern-state={variant}>
+            <p className="sp-cell-label">AppShell / {variant}</p>
+            <div className="sp-shell-frame">
+              <AppShell
+                id={`sp-shell-${variant}`}
+                variant={variant}
+                product="Product"
+                sections={SHELL_SECTIONS}
+                can={() => false}
+                current="orders"
+                account={{ name: "Ada Lovelace", role: "Purchasing" }}
+                {...(variant === "sidebar" ? { cart: { label: "Cart", href: "#cart", count: 2 } } : {})}
+              >
+                <p>The page.</p>
+              </AppShell>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function Matrix({ cells }: { cells: Cell[] }): React.ReactElement {
   return (
     <section className="sp-section" id="matrix" aria-label="State matrix">
@@ -132,7 +169,7 @@ function Matrix({ cells }: { cells: Cell[] }): React.ReactElement {
   );
 }
 
-/** The specimen: one cell per (component, variant, state), a design-system board and the patterns. Static HTML, no script. */
+/** The specimen: one cell per (component, variant, state), a design-system board and the two patterns. Static HTML, no script. */
 export function generateSpecimen(input: SpecimenInput): string {
   const cells = cellsOf(COMPONENTS);
   const body = renderToStaticMarkup(
@@ -146,6 +183,7 @@ export function generateSpecimen(input: SpecimenInput): string {
       <Board entries={input.entries} />
       <Matrix cells={cells} />
       <Patterns />
+      <Shells />
     </main>,
   );
   const data = JSON.stringify(cells).replace(/</g, "\\u003c");

@@ -47,3 +47,5 @@ export { DataTable } from "./kit/data-table.js";
 export type { DataTableProps, DataTableColumn } from "./kit/data-table.js";
 export { RecordListPage } from "./kit/record-list-page.js";
 export type { RecordListPageProps } from "./kit/record-list-page.js";
+export { AppShell } from "./kit/app-shell.js";
+export type { AppShellProps, AppShellSection, AppShellEntry, AppShellAccount, AppShellCart, AppShellLink } from "./kit/app-shell.js";

@@ -1,8 +1,9 @@
 /**
- * The slice: eight components and one working-screen pattern. Every consumer
+ * The slice: eight components and two working-screen patterns. Every consumer
  * of component data (the stylesheet, the specimen, the state check, the guide
  * and the generated index) reads these lists and nothing else.
  */
+import { appShellDef, appShellStyles } from "./app-shell.js";
 import { buttonDef, buttonStyles } from "./button.js";
 import { checkboxDef, checkboxStyles } from "./checkbox.js";
 import { dataTableDef, dataTableStyles } from "./data-table.js";
@@ -33,7 +34,10 @@ export const COMPONENTS: readonly KitEntry[] = [
 ];
 
 /** The working-screen patterns (composed of the components above). */
-export const PATTERNS: readonly KitEntry[] = [{ def: recordListPageDef, styles: recordListPageStyles }];
+export const PATTERNS: readonly KitEntry[] = [
+  { def: recordListPageDef, styles: recordListPageStyles },
+  { def: appShellDef, styles: appShellStyles },
+];
 
 export const ALL: readonly KitEntry[] = [...COMPONENTS, ...PATTERNS];
 

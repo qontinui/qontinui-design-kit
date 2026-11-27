@@ -22,7 +22,7 @@ function sourceCopy() {
   return dir;
 }
 
-test("the index of the eight-component slice (plus the pattern) is at most 8192 bytes", () => {
+test("the index of the eight-component slice (plus the two patterns) is at most 8192 bytes", () => {
   assert.equal(INDEX_BYTE_LIMIT, 8192);
   const bytes = Buffer.byteLength(gen());
   assert.ok(bytes <= 8192, `the index is ${bytes} bytes; trim JSDoc, never raise the limit`);
@@ -52,7 +52,7 @@ test("the index reads props from types, variants and states from data, and the u
   // RecordListPage's four state props are required: no `?`.
   assert.match(body, /empty: React\.ReactNode; loading: React\.ReactNode; error: React\.ReactNode; filteredEmpty: React\.ReactNode;/);
   assert.match(body, /Tokens: color-role-\{accent,/);
-  assert.equal((body.match(/^### /gm) ?? []).length, 9);
+  assert.equal((body.match(/^### /gm) ?? []).length, 10);
 });
 
 test("generated from the sources or from the declarations, the index is the same bytes", () => {
