@@ -529,3 +529,55 @@ test("an Escape inside <main> is the page's: the open account menu stays open an
   assert.equal(r.after.state.ariaExpanded, true, "the shell did not take the page's Escape");
   record("escape-in-main", "360x740", { control_focused: r.control.state.focused, account_expanded: r.after.state.ariaExpanded });
 });
+
+// The door cannot resize the browser, so the case applies the layout the `wide` rule applies to the two
+// toggles (display: none) through the Bridge's page evaluation, then waits two frames for the observer.
+const UNLAY_TOGGLES = `new Promise((resolve) => {
+  const s = document.createElement("style");
+  s.textContent = ".dk-app-shell-menu, .dk-app-shell-account > .dk-button { display: none !important; }";
+  document.head.appendChild(s);
+  requestAnimationFrame(() => requestAnimationFrame(() => resolve("unlaid")));
+})`;
+
+test("a menu whose toggle stops being laid out closes: an open state cannot outlive its control", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const { dir } = await shellPage();
+  const r = await drive(dir, "360x740", [
+    DISCOVER,
+    act("openMenu", MENU, "click"),
+    act("openAccount", ACCOUNT, "click"),
+    get("menuOpen", MENU),
+    get("accountOpen", ACCOUNT),
+    { name: "unlay", action: "pageEvaluate", payload: { expression: UNLAY_TOGGLES } },
+    get("menuAfter", MENU),
+    get("accountAfter", ACCOUNT),
+  ]);
+  assert.equal(r.menuOpen.state.ariaExpanded, true);
+  assert.equal(r.accountOpen.state.ariaExpanded, true);
+  assert.equal(r.menuAfter.state.visibilityReason, "no-layout", `the menu control is no longer laid out: ${JSON.stringify(reading(r.menuAfter))}`);
+  assert.equal(r.menuAfter.state.ariaExpanded, false, "the navigation menu closed with its control");
+  assert.equal(r.accountAfter.state.ariaExpanded, false, "the account menu closed with its control");
+  record("toggle-unlaid", "360x740", { evaluate: r.unlay, menu: r.menuAfter.state.ariaExpanded, account: r.accountAfter.state.ariaExpanded });
+});
+
+test("with both menus open, Escape closes the one holding the key and returns focus to that menu's own toggle", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const { dir } = await shellPage();
+  const r = await drive(dir, "360x740", [
+    DISCOVER,
+    act("openMenu", MENU, "click"),
+    act("openAccount", ACCOUNT, "click"),
+    keys("escItem", "dom-shell-item-profile", "Escape"),
+    get("account1", ACCOUNT),
+    get("menu1", MENU),
+    keys("escEntry", FIRST, "Escape"),
+    get("menu2", MENU),
+  ]);
+  assert.equal(r.account1.state.ariaExpanded, false, "Escape in the account menu closed it");
+  assert.equal(r.account1.state.focused, true, "focus is on the account toggle, not the nav menu control");
+  assert.equal(r.menu1.state.ariaExpanded, true, "the navigation menu stayed open");
+  assert.equal(r.menu1.state.focused, false);
+  assert.equal(r.menu2.state.ariaExpanded, false, "Escape in the navigation closed it");
+  assert.equal(r.menu2.state.focused, true, "focus is on the menu control");
+  record("escape-by-menu", "360x740", { account: [r.account1.state.ariaExpanded, r.account1.state.focused], menu: [r.menu1.state.ariaExpanded, r.menu2.state.ariaExpanded, r.menu2.state.focused] });
+});

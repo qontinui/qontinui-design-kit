@@ -49,6 +49,9 @@ test("the index reads props from types, variants and states from data, and the u
   assert.match(body, /Props: variant\?: "primary" \| "secondary" \| "quiet"; loading\?: boolean; type\?: "button" \| "submit" \| "reset"\n/);
   assert.match(body, /Variants: variant=primary\|secondary\|quiet\nStates: default, hover, focus-visible, active, disabled, loading\n/);
   assert.match(body, /### DataTable\n/);
+  // AppShell keeps its own JSDoc (a helper declared between the doc and the function would take it).
+  assert.match(body, /^### AppShell\nThe app shell: navigation grouped by permission/m);
+  assert.match(body, /^### AppShell\n[^#]*\nUse: The default shell of a product/m);
   // RecordListPage's four state props are required: no `?`.
   assert.match(body, /empty: React\.ReactNode; loading: React\.ReactNode; error: React\.ReactNode; filteredEmpty: React\.ReactNode;/);
   assert.match(body, /Tokens: color-role-\{accent,/);

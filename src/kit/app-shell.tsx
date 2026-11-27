@@ -57,6 +57,12 @@ export interface AppShellProps {
   children?: React.ReactNode;
 }
 
+/** The toggle button in a wrapper, or null when the current width does not lay it out (display: none). */
+function toggleOf(wrapper: HTMLElement | null): HTMLButtonElement | null {
+  const b = wrapper?.querySelector<HTMLButtonElement>(":scope > .dk-button") ?? null;
+  return b !== null && b.getClientRects().length > 0 ? b : null;
+}
+
 /**
  * The app shell: navigation grouped by permission, the acting account and role, and an optional cart, one step from any scroll position.
  * @use The default shell of a product; derive its entries from every role's tasks. A declared design replaces it.
@@ -74,36 +80,42 @@ export function AppShell(props: AppShellProps): React.ReactElement {
   const entryId = (id: string): string => `${base}-entry-${id}`;
   const itemId = (id: string): string => `${base}-item-${id}`;
   const sectionLabelId = (id: string): string => `${base}-section-${id}`;
-  // The wrappers of the two toggles: their buttons are Button elements, which take no ref of their own.
-  const menuRef = React.useRef<HTMLSpanElement>(null);
-  const accountRef = React.useRef<HTMLSpanElement>(null);
-  const toggleOf = (wrapper: React.RefObject<HTMLSpanElement | null>): HTMLButtonElement | null => {
-    const b = wrapper.current?.querySelector<HTMLButtonElement>(":scope > .dk-button") ?? null;
-    // A toggle the current width does not lay out (display: none) is not rendered for the user.
-    return b !== null && b.getClientRects().length > 0 ? b : null;
-  };
+  // The wrappers of the two toggles, held as state through callback refs, so a wrapper mounted after the
+  // first render (an account passed later) is observed too. Their buttons are Button elements, which take
+  // no ref of their own.
+  const [menuEl, setMenuEl] = React.useState<HTMLSpanElement | null>(null);
+  const [accountEl, setAccountEl] = React.useState<HTMLSpanElement | null>(null);
   // An open state left from another width must not survive its toggle: when a toggle stops being laid out
   // (the menu control at the wide form, a name-only account's toggle there), its menu closes.
   React.useEffect(() => {
     if (typeof ResizeObserver === "undefined") return;
-    const watch = (wrapper: React.RefObject<HTMLSpanElement | null>, close: () => void): ResizeObserver | null => {
-      if (!wrapper.current) return null;
+    const watch = (wrapper: HTMLSpanElement | null, close: () => void): ResizeObserver | null => {
+      if (wrapper === null) return null;
       const ro = new ResizeObserver(() => {
         if (toggleOf(wrapper) === null) close();
       });
-      ro.observe(wrapper.current);
+      ro.observe(wrapper);
+      // A toggle's own box changes too (display: none on the button alone leaves the wrapper's).
+      const button = wrapper.querySelector(":scope > .dk-button");
+      if (button) ro.observe(button);
       return ro;
     };
-    const observers = [watch(menuRef, () => setOpen(false)), watch(accountRef, () => setAccountOpen(false))];
+    const observers = [watch(menuEl, () => setOpen(false)), watch(accountEl, () => setAccountOpen(false))];
     return () => observers.forEach((o) => o?.disconnect());
-  }, []);
-  // On the bar and the nav only, never the page: an Escape in <main> (a search field, a Dialog) is not the shell's.
+  }, [menuEl, accountEl]);
+  // On the bar and the nav only, never the page: an Escape in <main> (a search field, a Dialog) is not the
+  // shell's. It closes the menu that holds the key's target, and focus returns to that menu's own toggle.
   const closeOnEscape = (ev: React.KeyboardEvent): void => {
-    if (ev.key !== "Escape" || ev.defaultPrevented || (!open && !accountOpen)) return;
-    const back = toggleOf(open ? menuRef : accountRef);
-    setOpen(false);
-    setAccountOpen(false);
-    back?.focus();
+    if (ev.key !== "Escape" || ev.defaultPrevented) return;
+    const target = ev.target instanceof Node ? ev.target : null;
+    const inAccount = accountOpen && target !== null && accountEl !== null && accountEl.contains(target);
+    if (inAccount || (accountOpen && !open)) {
+      setAccountOpen(false);
+      toggleOf(accountEl)?.focus();
+    } else if (open) {
+      setOpen(false);
+      toggleOf(menuEl)?.focus();
+    }
   };
 
   const shown = sections
@@ -141,7 +153,7 @@ export function AppShell(props: AppShellProps): React.ReactElement {
           <span className="dk-app-shell-product">{product}</span>
           <span className="dk-app-shell-tools">
             {account === undefined ? null : (
-              <span ref={accountRef} className="dk-app-shell-account" data-menu={menu}>
+              <span ref={setAccountEl} className="dk-app-shell-account" data-menu={menu}>
                 {menu === "none" ? null : (
                   <Button id={`${base}-account`} variant="quiet" aria-expanded={accountOpen} aria-controls={accountMenuId} onClick={() => setAccountOpen((o) => !o)}>
                     <span className="dk-app-shell-role">{account.role}</span>
@@ -173,7 +185,7 @@ export function AppShell(props: AppShellProps): React.ReactElement {
               </a>
             )}
           </span>
-          <span ref={menuRef} className="dk-app-shell-menu">
+          <span ref={setMenuEl} className="dk-app-shell-menu">
             <Button id={`${base}-menu`} variant="quiet" aria-expanded={open} aria-controls={navId} onClick={() => setOpen((o) => !o)}>
               {menuLabel}
             </Button>
