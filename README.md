@@ -62,9 +62,9 @@ Craft bands (`src/craft/arithmetic.ts`, `draft`, listed in the report as `out_of
 
 ## The kit slice, the specimen and the state check (Phase 5)
 
-`defineComponent({ name, props, states })` stores a component's states as data from the closed list `default | hover | focus-visible | active | disabled | loading | error | selected`. The slice is `Button`, `TextInput`, `Select`, `Checkbox`, `Switch`, `Tabs`, `Dialog` and `DataTable` over Radix (or the native element), plus the working-screen pattern `RecordListPage`, whose `empty`, `loading`, `error` and `filteredEmpty` props are required (omitting one is a compile error, proved by a `@ts-expect-error` fixture). The kit ships no skin: every declaration in `kitCss()` reads `var(--dk-*)` (a test reads every rule for a literal), so a source must provide the tokens the kit reads (`kitTokenContract()`; `design/language.dtcg.json` in this repo is a complete example whose identity groups are undeclared and whose structural groups are authored). Disabled is visibly different from enabled in every control. Components are imported from the package root; `@qontinui/design-kit/specimen` exports `generateSpecimen`. React 18 or 19 and the Radix packages are peers.
+`defineComponent({ name, props, states })` stores a component's states as data from the closed list `default | hover | focus-visible | active | disabled | loading | error | selected`. The slice is `Button`, `TextInput`, `Select`, `Checkbox`, `Switch`, `Tabs`, `Dialog` and `DataTable` over Radix (or the native element), plus the working-screen pattern `RecordListPage`, whose `empty`, `loading`, `error` and `filteredEmpty` props are required (omitting one is a compile error, proved by a `@ts-expect-error` fixture). Since 0.3.0 a second pattern, `AppShell`, is in the slice (below). The kit ships no skin: every declaration in `kitCss()` reads `var(--dk-*)` (a test reads every rule for a literal), so a source must provide the tokens the kit reads (`kitTokenContract()`; `design/language.dtcg.json` in this repo is a complete example whose identity groups are undeclared and whose structural groups are authored). Disabled is visibly different from enabled in every control. Components are imported from the package root; `@qontinui/design-kit/specimen` exports `generateSpecimen`. React 18 or 19 and the Radix packages are peers.
 
-`design-kit specimen` writes a static `specimen.html` (no script): one cell per component, variant and state (56 for this slice), a design-system board of the compiled roles, scale, spacing, radius and motion, the `RecordListPage` states, and, when identity is undeclared, `data-design-identity="undeclared"` on `<html>` with a banner.
+`design-kit specimen` writes a static `specimen.html` (no script): one cell per component, variant and state (56 for this slice), a design-system board of the compiled roles, scale, spacing, radius and motion, the `RecordListPage` states, `AppShell` in both variants (its narrow form: the specimen loads no `conditions.css`), and, when identity is undeclared, `data-design-identity="undeclared"` on `<html>` with a banner.
 
 `design-kit check-states <url|file>` drives `ui-bridge-inject --exec-stdin` (the published `@qontinui/ui-bridge-wrapper`) with `getElementStateStyles` and writes `state-coverage.json`: per cell, `changedProperties` (a count), whether every changed value is token-derived, and `complete`.
 
@@ -74,6 +74,23 @@ Craft bands (`src/craft/arithmetic.ts`, `draft`, listed in the report as `out_of
 - A measured cell with no counted change is a `no-delta` finding.
 - `focus-visible` is not emulated by the published door at `@qontinui/ui-bridge` <0.56.0 (Probe 3; 0.56.0 emulates it, see 0.2.1 below, but `check-states` does not use that yet): those cells are `unknown(focus-visible-not-emulated)`, never a pass. Any other unknown (the door answered fewer steps than asked, an element is missing) exits 3.
 - Token values are known only when every linked stylesheet loaded (the same check `validate-guide` runs) **and** the page declares a `--dk-*` token other than the kit's own `--dk-kit-states`. Otherwise every cell the door measured is `unknown(stylesheet-missing): <paths> did not load`, `unknown(stylesheet-pending): …`, `unknown(stylesheet-unreadable): …` or `unknown(no-token-values)` (or `unknown(instrument-cannot-read)` when the door did not answer the check), and `state-coverage.json` carries `stylesheets` (`requested`, `failed`, `unreadable`, `pending`).
+
+## The app shell: `AppShell`
+
+`AppShell` is the kit's second working-screen pattern (plan `2026-11-26-the-app-shell-is-never-derived-from-what-every-role-does-on-every-page`, Phase 3): the default shell of a new product, not a standard. A tenant's declared design (a customer's Figma, a design system of its own) replaces it, and the shell itself, what it holds and which role sees which entry, is derived as a surface under the tenant's `ux-priorities`, from what every role does on every page.
+
+```tsx
+<AppShell product="Shop" sections={sections} can={(p) => me.permissions.includes(p)} current="orders"
+  account={{ name: me.name, role: me.roleLabel, items: [{ id: "out", label: "Sign out", href: "/logout" }] }}
+  cart={{ label: "Cart", href: "/cart", count: 2 }}>
+  {page}
+</AppShell>
+```
+
+- **Forms.** At and above the source's `layout.breakpoint.md` (the compiled `wide` condition), `variant: "sidebar"` (the default) puts the navigation beside the content, in view while the content scrolls and scrolling within itself when it is taller than the viewport; `variant: "topbar"` pins one row of one control's height (`layout.shell.bar`) with the entries inline. Below it, a fixed bar of one control's height holds the product name, the account and cart controls and the menu control (`aria-expanded`, `aria-controls`), and the entries open in a menu panel. Scroll padding equals the pinned height, so a focused control is never hidden behind the bar. Where the bar would take more than `budgets.shell.max_pinned_share` of the height (the `short` condition, as at a high zoom), it unpins.
+- **Permissions.** `sections` group the entries; `can(permission)` decides each `requires`. A denied entry is not rendered, or, with `whenDenied: "disable"` (which then requires a `reason`), rendered with `aria-disabled="true"` and its reason as visible text. A denied or emptied section is not rendered.
+- **Account and cart.** The account control always shows the role; the name shows in it at the wide form and otherwise in its menu, beside the app's `items`. Nothing is shown for an absent field. The cart slot renders only when `cart` is passed.
+- Every declaration reads `var(--dk-*)` (`layout.shell.bar` and `layout.shell.sidebar` among them); the width and height switches are `wide` and `short` rules, so they reach a page only through the project's compiled `conditions.css`, which the page must load after `kitCss()`. The tests drive the component through the UI Bridge exec door at 1280 x 800, 360 x 740, 360 x 320 and 1280 x 400 (`test/app-shell.test.js`).
 
 ## The component index (Phase 6)
 
@@ -106,6 +123,13 @@ npm run typecheck && npm run lint && npm test
 `npm test` builds `dist/` first. The adapter tests build `@qontinui/design-tokens` at `415be45` from a clone of `$DESIGN_TOKENS_REPO` (a sibling `../qontinui-design-tokens` checkout, else GitHub) into `.dk-cache/`.
 
 ## Changelog
+
+### 0.3.0 (2026-11-27)
+
+Plan `2026-11-26-the-app-shell-is-never-derived-from-what-every-role-does-on-every-page`, Phases 1 and 3:
+
+- **A new compiled output, `conditions.css`** (Phase 1). `design-kit compile` writes the kit's conditional rules (`when: "wide"` / `when: "short"`) under the project's own breakpoint and height values. **Every consumer must load it after the kit's stylesheet (`kitCss()`)**: its rules override base rules of equal specificity only by coming later, so a page that loads it first, or through a stylesheet imported before `kitCss()`, silently keeps the narrow form at every width. The source gains `layout.shell.bar`, `layout.shell.sidebar` and `budgets.shell.max_pinned_share`; a source without them gets no rule for the condition and the leaf listed `undeclared`. `theme.css` now writes each breakpoint as the source's literal, so Tailwind's `md:` applies.
+- **`AppShell`**, the second working-screen pattern (Phase 3, above), with its prop types `AppShellProps`, `AppShellSection`, `AppShellEntry`, `AppShellAccount`, `AppShellCart` and `AppShellLink`. The specimen renders it in both variants.
 
 ### 0.2.1 (2026-11-25)
 
