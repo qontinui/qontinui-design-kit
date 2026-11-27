@@ -511,3 +511,21 @@ test("Escape closes the open menu and returns focus to its control; following an
   assert.equal(r.afterFollow.state.ariaExpanded, false, "following an item closed the account menu");
   record("escape-and-follow", "360x740", { menu: [r.opened.state.ariaExpanded, r.closed.state.ariaExpanded], account: [r.accountOpened.state.ariaExpanded, r.accountClosed.state.ariaExpanded, r.afterFollow.state.ariaExpanded] });
 });
+
+test("an Escape inside <main> is the page's: the open account menu stays open and focus stays on the page's control", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const { dir } = await shellPage();
+  const r = await drive(dir, "360x740", [
+    DISCOVER,
+    act("openAccount", ACCOUNT, "click"),
+    get("opened", ACCOUNT),
+    keys("esc", CONTROL, "Escape"),
+    get("control", CONTROL),
+    get("after", ACCOUNT),
+  ]);
+  assert.equal(r.opened.state.ariaExpanded, true);
+  assert.equal(r.control.state.focused, true, "focus stays on the control in <main>");
+  assert.equal(r.after.state.focused, false, "focus did not move to the account control");
+  assert.equal(r.after.state.ariaExpanded, true, "the shell did not take the page's Escape");
+  record("escape-in-main", "360x740", { control_focused: r.control.state.focused, account_expanded: r.after.state.ariaExpanded });
+});

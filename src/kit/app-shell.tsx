@@ -74,12 +74,36 @@ export function AppShell(props: AppShellProps): React.ReactElement {
   const entryId = (id: string): string => `${base}-entry-${id}`;
   const itemId = (id: string): string => `${base}-item-${id}`;
   const sectionLabelId = (id: string): string => `${base}-section-${id}`;
+  // The wrappers of the two toggles: their buttons are Button elements, which take no ref of their own.
+  const menuRef = React.useRef<HTMLSpanElement>(null);
+  const accountRef = React.useRef<HTMLSpanElement>(null);
+  const toggleOf = (wrapper: React.RefObject<HTMLSpanElement | null>): HTMLButtonElement | null => {
+    const b = wrapper.current?.querySelector<HTMLButtonElement>(":scope > .dk-button") ?? null;
+    // A toggle the current width does not lay out (display: none) is not rendered for the user.
+    return b !== null && b.getClientRects().length > 0 ? b : null;
+  };
+  // An open state left from another width must not survive its toggle: when a toggle stops being laid out
+  // (the menu control at the wide form, a name-only account's toggle there), its menu closes.
+  React.useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = (wrapper: React.RefObject<HTMLSpanElement | null>, close: () => void): ResizeObserver | null => {
+      if (!wrapper.current) return null;
+      const ro = new ResizeObserver(() => {
+        if (toggleOf(wrapper) === null) close();
+      });
+      ro.observe(wrapper.current);
+      return ro;
+    };
+    const observers = [watch(menuRef, () => setOpen(false)), watch(accountRef, () => setAccountOpen(false))];
+    return () => observers.forEach((o) => o?.disconnect());
+  }, []);
+  // On the bar and the nav only, never the page: an Escape in <main> (a search field, a Dialog) is not the shell's.
   const closeOnEscape = (ev: React.KeyboardEvent): void => {
-    if (ev.key !== "Escape" || (!open && !accountOpen)) return;
-    const back = open ? `${base}-menu` : `${base}-account`;
+    if (ev.key !== "Escape" || ev.defaultPrevented || (!open && !accountOpen)) return;
+    const back = toggleOf(open ? menuRef : accountRef);
     setOpen(false);
     setAccountOpen(false);
-    document.getElementById(back)?.focus();
+    back?.focus();
   };
 
   const shown = sections
@@ -111,13 +135,13 @@ export function AppShell(props: AppShellProps): React.ReactElement {
   const menu = account === undefined ? "none" : hasItems ? "always" : account.name !== undefined ? "narrow" : "none";
   const name = account?.name === undefined ? null : <span className="dk-app-shell-account-name">{account.name}</span>;
   return (
-    <div className="dk-app-shell" data-variant={variant} data-open={open ? "true" : "false"} onKeyDown={closeOnEscape}>
-      <div className="dk-app-shell-top">
+    <div className="dk-app-shell" data-variant={variant} data-open={open ? "true" : "false"}>
+      <div className="dk-app-shell-top" onKeyDown={closeOnEscape}>
         <div className="dk-app-shell-bar">
           <span className="dk-app-shell-product">{product}</span>
           <span className="dk-app-shell-tools">
             {account === undefined ? null : (
-              <span className="dk-app-shell-account" data-menu={menu}>
+              <span ref={accountRef} className="dk-app-shell-account" data-menu={menu}>
                 {menu === "none" ? null : (
                   <Button id={`${base}-account`} variant="quiet" aria-expanded={accountOpen} aria-controls={accountMenuId} onClick={() => setAccountOpen((o) => !o)}>
                     <span className="dk-app-shell-role">{account.role}</span>
@@ -149,7 +173,7 @@ export function AppShell(props: AppShellProps): React.ReactElement {
               </a>
             )}
           </span>
-          <span className="dk-app-shell-menu">
+          <span ref={menuRef} className="dk-app-shell-menu">
             <Button id={`${base}-menu`} variant="quiet" aria-expanded={open} aria-controls={navId} onClick={() => setOpen((o) => !o)}>
               {menuLabel}
             </Button>

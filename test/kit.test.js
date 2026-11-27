@@ -95,6 +95,41 @@ function conditionLiterals(css) {
   return { preludes, skin };
 }
 
+// kitCss() under the strict pattern: every literal colour, length or percentage
+// in a declaration fails, except the structural values named here by
+// component, property and exact value. A new `%` or `dvh` literal fails.
+const KIT_ADMITTED = new Set([
+  "Dialog | background-color: color-mix(in oklab, var(--dk-color-role-text) 40%, transparent)",
+  "Dialog | top: 50%",
+  "Dialog | left: 50%",
+  "DataTable | width: 100%",
+  "AppShell | top: 100%",
+  "AppShell | max-height: calc(100dvh - var(--dk-layout-shell-bar))",
+]);
+
+/** `<component> | <property>: <value>` for each declaration of a kitCss() text carrying a strict literal. */
+function strictKitLiterals(css) {
+  const out = [];
+  let component = "";
+  for (const line of css.split("\n")) {
+    const c = /^\/\* (\w+) \*\/$/.exec(line);
+    if (c) component = c[1];
+    const m = /^\s+([a-z-]+):\s*([^;]+);$/.exec(line);
+    if (m && m[1] !== "--dk-kit-states" && (STRICT_LITERAL.test(m[2]) || NAMED.test(m[2]))) out.push(`${component} | ${m[1]}: ${m[2]}`);
+  }
+  return out;
+}
+
+test("kitCss() under the strict literal pattern: only the named structural values are admitted", () => {
+  const found = strictKitLiterals(kitCss());
+  assert.deepEqual(found.filter((f) => !KIT_ADMITTED.has(f)), []);
+  // Each admission is still in use; a stale one is removed rather than kept.
+  assert.deepEqual([...KIT_ADMITTED].filter((a) => !found.includes(a)), []);
+  // Seeded violations: a new percentage or viewport length, and an admitted value on another property, are reported.
+  const seeded = "/* AppShell */\n.x {\n  width: 50%;\n  height: 90dvh;\n  left: 100%;\n}\n";
+  assert.deepEqual(strictKitLiterals(seeded).filter((f) => !KIT_ADMITTED.has(f)), ["AppShell | width: 50%", "AppShell | height: 90dvh", "AppShell | left: 100%"]);
+});
+
 test("conditions.css ships no skin: the source's literal appears only in @media preludes, never in a declaration", async () => {
   const json = exampleJson();
   const md = json.layout.breakpoint.md.$value;
