@@ -51,17 +51,17 @@ test("AppShell is the kit's second working-screen pattern", () => {
 test("an entry the role may not use is hidden by default, and disabled with its reason under whenDenied: disable", () => {
   const sections = [{ id: "a", label: "A", entries: [ENTRY("open"), ENTRY("hidden", { requires: "x" }), ENTRY("off", { requires: "y", whenDenied: "disable", reason: "Owners only" })] }];
   const html = render({ sections });
-  assert.ok(element(html, "s-open").tag.includes('href="#open"'));
-  assert.equal(element(html, "s-hidden"), null, "a denied entry is not rendered by default");
+  assert.ok(element(html, "s-entry-open").tag.includes('href="#open"'));
+  assert.equal(element(html, "s-entry-hidden"), null, "a denied entry is not rendered by default");
   assert.ok(!html.includes("#hidden"));
-  const off = element(html, "s-off");
+  const off = element(html, "s-entry-off");
   assert.ok(off.tag.includes('aria-disabled="true"'), off.tag);
   assert.ok(!off.tag.includes("href="), "a disabled entry links nowhere");
   assert.equal(off.text, "OFFOwners only", "the reason is visible text in the entry");
   // Permitted, the same entries are plain links.
   const granted = render({ sections, can: allow(["x", "y"]) });
-  assert.ok(element(granted, "s-hidden").tag.includes('href="#hidden"'));
-  assert.ok(!element(granted, "s-off").tag.includes("aria-disabled"));
+  assert.ok(element(granted, "s-entry-hidden").tag.includes('href="#hidden"'));
+  assert.ok(!element(granted, "s-entry-off").tag.includes("aria-disabled"));
   assert.ok(!granted.includes("Owners only"));
 });
 
@@ -74,12 +74,12 @@ test("a section left empty is not rendered, and neither is a section whose own p
       { id: "gated", label: "Gated", requires: "y", entries: [ENTRY("three")] },
     ],
   });
-  assert.ok(element(html, "s-kept-label"));
-  for (const id of ["empty", "none", "gated"]) assert.equal(element(html, `s-${id}-label`), null, `section ${id}`);
+  assert.ok(element(html, "s-section-kept"));
+  for (const id of ["empty", "none", "gated"]) assert.equal(element(html, `s-section-${id}`), null, `section ${id}`);
   assert.ok(!html.includes("Emptied") && !html.includes("Nothing") && !html.includes("Gated"));
   // A section with only a disabled entry is not empty: the entry is shown.
   const disabledOnly = render({ sections: [{ id: "d", label: "D", entries: [ENTRY("e", { requires: "x", whenDenied: "disable", reason: "Why" })] }] });
-  assert.ok(element(disabledOnly, "s-d-label"));
+  assert.ok(element(disabledOnly, "s-section-d"));
 });
 
 test("the account control shows the role, and the name only when given", () => {
@@ -96,10 +96,49 @@ test("the account control shows the role, and the name only when given", () => {
   assert.ok(!roleOnly.includes("dk-app-shell-account-name"), "no placeholder for an absent name");
 
   const withItems = render({ account: { role: "Owner", items: [{ id: "out", label: "Sign out", href: "/logout" }] } });
-  assert.ok(element(withItems, "s-out").tag.includes('href="/logout"'));
+  assert.ok(element(withItems, "s-item-out").tag.includes('href="/logout"'));
   assert.ok(element(withItems, "s-account-menu").tag.includes("hidden"), "the account menu starts closed");
 
   assert.ok(!render({}).includes("dk-app-shell-account"), "no account area without an account");
+});
+
+test("the account toggle exists only for a menu with something in it at that width: a name-only account is a static label at the wide form", () => {
+  const menuOf = (html) => /class="dk-app-shell-account" data-menu="([a-z]+)"/.exec(html)[1];
+  const staticOf = (html) => /<span(?: id="[^"]*")? class="dk-app-shell-role dk-app-shell-account-static">/.exec(html);
+  // A name and no items: the narrow form opens a menu holding the name; the wide form shows the name in a static label.
+  const nameOnly = render({ account: { name: "Ada", role: "Owner" } });
+  assert.equal(menuOf(nameOnly), "narrow");
+  assert.match(element(nameOnly, "s-account").tag, /^<button/);
+  assert.ok(staticOf(nameOnly), "a static label for the wide form");
+  assert.ok(!staticOf(nameOnly)[0].includes("id="), "the static label takes no id while the toggle holds it");
+  // Items: the toggle at every width, no static label.
+  const items = render({ account: { name: "Ada", role: "Owner", items: [{ id: "out", label: "Sign out", href: "/logout" }] } });
+  assert.equal(menuOf(items), "always");
+  assert.equal(staticOf(items), null);
+  // A role only: no toggle and no menu at any width; the static label is the control.
+  const roleOnly = render({ account: { role: "Owner" } });
+  assert.equal(menuOf(roleOnly), "none");
+  assert.match(element(roleOnly, "s-account").tag, /^<span/);
+  // The wide rules hide the toggle and its menu for a name-only account, and show the label.
+  const wide = PATTERNS[1].styles.rules.filter((r) => r.when === "wide").map((r) => `${r.selector} ${JSON.stringify(r.decls)}`);
+  assert.ok(wide.includes('.dk-app-shell-account[data-menu="narrow"] > .dk-button {"display":"none"}'), wide.join("\n"));
+  assert.ok(wide.includes('.dk-app-shell-account[data-menu="narrow"] > .dk-app-shell-account-menu {"display":"none"}'));
+  assert.ok(wide.includes('.dk-app-shell-account[data-menu="narrow"] > .dk-app-shell-account-static {"display":"inline-flex"}'));
+});
+
+test("each kind of id has its own namespace: an entry, an item and a section named like a control never collide", () => {
+  const html = render({
+    sections: [{ id: "cart", label: "Menu", entries: [ENTRY("cart"), ENTRY("menu"), ENTRY("nav"), ENTRY("account")] }],
+    account: { name: "Ada", role: "Owner", items: [{ id: "cart", label: "Cart item", href: "#c" }, { id: "menu", label: "Menu item", href: "#m" }] },
+    cart: { label: "Cart", href: "/cart" },
+  });
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(ids.filter((id, i) => ids.indexOf(id) !== i), [], `duplicate ids: ${ids.join(" ")}`);
+  for (const id of ["s-menu", "s-nav", "s-account", "s-account-menu", "s-cart", "s-entry-cart", "s-entry-menu", "s-entry-nav", "s-entry-account", "s-item-cart", "s-item-menu", "s-section-cart"]) {
+    assert.ok(ids.includes(id), `${id} in ${ids.join(" ")}`);
+  }
+  assert.ok(element(html, "s-cart").tag.includes('href="/cart"'), "the cart control keeps its id");
+  assert.ok(element(html, "s-nav").tag.startsWith("<nav"), "the nav keeps its id");
 });
 
 test("the cart slot renders only when passed", () => {
@@ -113,8 +152,8 @@ test("the cart slot renders only when passed", () => {
 
 test("the current entry carries aria-current, and no other does", () => {
   const html = render({ sections: [{ id: "a", label: "A", entries: [ENTRY("one"), ENTRY("two")] }], current: "two" });
-  assert.ok(element(html, "s-two").tag.includes('aria-current="page"'));
-  assert.ok(!element(html, "s-one").tag.includes("aria-current"));
+  assert.ok(element(html, "s-entry-two").tag.includes('aria-current="page"'));
+  assert.ok(!element(html, "s-entry-one").tag.includes("aria-current"));
   assert.equal((html.match(/aria-current=/g) ?? []).length, 1);
 });
 
@@ -251,7 +290,7 @@ const TO_END = [
   { name: "endEl", action: "getElement", payload: { id: "dom-page-end" } },
 ];
 const MENU = "dom-shell-menu";
-const bridgeId = (entry) => `dom-shell-${entry}`;
+const bridgeId = (entry) => `dom-shell-entry-${entry}`;
 const FIRST = bridgeId(PERMITTED[0]);
 const LAST = bridgeId(PERMITTED[PERMITTED.length - 1]);
 const CONTROL = "dom-body-control";
@@ -425,4 +464,50 @@ test("variant topbar at 1280 x 800: one pinned row of one control's height, ever
   }
   assert.ok(inView(r[`end:${PERMITTED[0]}`]));
   record("wide-topbar-end", "1280x800", { bar, first: reading(r[`end:${PERMITTED[0]}`]) });
+});
+
+const ACCOUNT = "dom-shell-account";
+const keys = (name, id, key) => ({ name, action: "executeElementAction", payload: { id, request: { action: "sendKeys", params: { keys: [{ key }] } } } });
+
+test("a name-only account: a toggle that opens its name at 360 x 740, no toggle and no panel at 1280 x 800", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const { account, ...rest } = SPEC;
+  const { dir } = await shellPage({ ...rest, account: { name: account.name, role: account.role } });
+  const narrow = await drive(dir, "360x740", [DISCOVER, get("before", ACCOUNT), act("open", ACCOUNT, "click"), get("after", ACCOUNT)]);
+  assert.ok(inView(narrow.before), `the toggle is in the bar: ${JSON.stringify(reading(narrow.before))}`);
+  assert.equal(narrow.before.state.ariaExpanded, false);
+  assert.equal(narrow.after.state.ariaExpanded, true, "it opens the menu holding the name");
+  const wide = await drive(dir, "1280x800", [DISCOVER, get("toggle", ACCOUNT)]);
+  // The toggle is display: none at the wide form, so the Bridge reads it out of layout, never in view.
+  assert.ok(!inView(wide.toggle), `no toggle at the wide form: ${JSON.stringify(reading(wide.toggle))}`);
+  assert.equal(wide.toggle.state.visibilityReason, "no-layout");
+  record("account-name-only", "360x740,1280x800", { narrow: reading(narrow.before), wide: reading(wide.toggle) });
+});
+
+test("Escape closes the open menu and returns focus to its control; following an account item closes the account menu", async (t) => {
+  if (!(await needDoor(t, assert))) return;
+  const { dir } = await shellPage();
+  const r = await drive(dir, "360x740", [
+    DISCOVER,
+    act("open", MENU, "click"),
+    get("opened", MENU),
+    keys("esc", FIRST, "Escape"),
+    get("closed", MENU),
+    get("first", FIRST),
+    act("openAccount", ACCOUNT, "click"),
+    get("accountOpened", ACCOUNT),
+    keys("escAccount", ACCOUNT, "Escape"),
+    get("accountClosed", ACCOUNT),
+    act("reopenAccount", ACCOUNT, "click"),
+    act("follow", "dom-shell-item-profile", "click"),
+    get("afterFollow", ACCOUNT),
+  ]);
+  assert.equal(r.opened.state.ariaExpanded, true);
+  assert.equal(r.closed.state.ariaExpanded, false, "Escape closed the navigation menu");
+  assert.equal(r.closed.state.focused, true, "focus is back on the menu control");
+  assert.ok(!inView(r.first), "the entries are behind the closed menu again");
+  assert.equal(r.accountOpened.state.ariaExpanded, true);
+  assert.equal(r.accountClosed.state.ariaExpanded, false, "Escape closed the account menu");
+  assert.equal(r.afterFollow.state.ariaExpanded, false, "following an item closed the account menu");
+  record("escape-and-follow", "360x740", { menu: [r.opened.state.ariaExpanded, r.closed.state.ariaExpanded], account: [r.accountOpened.state.ariaExpanded, r.accountClosed.state.ariaExpanded, r.afterFollow.state.ariaExpanded] });
 });

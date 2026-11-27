@@ -14,7 +14,9 @@ export function serveDir(dir) {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
       const file = path.join(dir, decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/"));
-      if (!file.startsWith(dir) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+      // Inside the served dir only: a sibling like `<dir>-other` shares the prefix, so compare by relative path.
+      const rel = path.relative(dir, file);
+      if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
         res.statusCode = 404;
         res.end("not found");
         return;

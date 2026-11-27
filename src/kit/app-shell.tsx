@@ -52,7 +52,7 @@ export interface AppShellProps {
   account?: AppShellAccount;
   cart?: AppShellCart;
   menuLabel?: string;
-  /** DOM id prefix of the shell's controls (`<id>-menu`, `<id>-<entry id>`). */
+  /** DOM id prefix: `<id>-menu`, `-nav`, `-account`, `-cart`, `-entry-<id>`, `-item-<id>`, `-section-<id>`. */
   id?: string;
   children?: React.ReactNode;
 }
@@ -68,8 +68,19 @@ export function AppShell(props: AppShellProps): React.ReactElement {
   const base = props.id ?? `dk-shell-${generated}`;
   const [open, setOpen] = React.useState(false);
   const [accountOpen, setAccountOpen] = React.useState(false);
+  // One namespace per kind, so an entry, an item and a section never share an id, nor take a control's.
   const navId = `${base}-nav`;
   const accountMenuId = `${base}-account-menu`;
+  const entryId = (id: string): string => `${base}-entry-${id}`;
+  const itemId = (id: string): string => `${base}-item-${id}`;
+  const sectionLabelId = (id: string): string => `${base}-section-${id}`;
+  const closeOnEscape = (ev: React.KeyboardEvent): void => {
+    if (ev.key !== "Escape" || (!open && !accountOpen)) return;
+    const back = open ? `${base}-menu` : `${base}-account`;
+    setOpen(false);
+    setAccountOpen(false);
+    document.getElementById(back)?.focus();
+  };
 
   const shown = sections
     .filter((s) => s.requires === undefined || can(s.requires))
@@ -77,7 +88,7 @@ export function AppShell(props: AppShellProps): React.ReactElement {
     .filter((s) => s.entries.length > 0);
 
   const entry = (e: AppShellEntry): React.ReactElement => {
-    const id = `${base}-${e.id}`;
+    const id = entryId(e.id);
     if (e.requires !== undefined && !can(e.requires)) {
       // Only `whenDenied: "disable"` reaches here: shown, not usable, and saying why.
       return (
@@ -94,35 +105,41 @@ export function AppShell(props: AppShellProps): React.ReactElement {
     );
   };
 
-  const hasAccountMenu = account !== undefined && (account.name !== undefined || (account.items?.length ?? 0) > 0);
+  // What the account menu holds at each width: `always` (items), `narrow` (a name only, which the wide
+  // form shows in the control, so there the toggle gives way to a static label) or `none` (a role only).
+  const hasItems = (account?.items?.length ?? 0) > 0;
+  const menu = account === undefined ? "none" : hasItems ? "always" : account.name !== undefined ? "narrow" : "none";
+  const name = account?.name === undefined ? null : <span className="dk-app-shell-account-name">{account.name}</span>;
   return (
-    <div className="dk-app-shell" data-variant={variant} data-open={open ? "true" : "false"}>
+    <div className="dk-app-shell" data-variant={variant} data-open={open ? "true" : "false"} onKeyDown={closeOnEscape}>
       <div className="dk-app-shell-top">
         <div className="dk-app-shell-bar">
           <span className="dk-app-shell-product">{product}</span>
           <span className="dk-app-shell-tools">
             {account === undefined ? null : (
-              <span className="dk-app-shell-account">
-                {hasAccountMenu ? (
+              <span className="dk-app-shell-account" data-menu={menu}>
+                {menu === "none" ? null : (
                   <Button id={`${base}-account`} variant="quiet" aria-expanded={accountOpen} aria-controls={accountMenuId} onClick={() => setAccountOpen((o) => !o)}>
                     <span className="dk-app-shell-role">{account.role}</span>
-                    {account.name === undefined ? null : <span className="dk-app-shell-account-name">{account.name}</span>}
+                    {name}
                   </Button>
-                ) : (
-                  <span id={`${base}-account`} className="dk-app-shell-role">
+                )}
+                {menu === "always" ? null : (
+                  <span id={menu === "none" ? `${base}-account` : undefined} className="dk-app-shell-role dk-app-shell-account-static">
                     {account.role}
+                    {name}
                   </span>
                 )}
-                {hasAccountMenu ? (
+                {menu === "none" ? null : (
                   <span id={accountMenuId} className="dk-app-shell-account-menu" hidden={!accountOpen}>
                     {account.name === undefined ? null : <span className="dk-app-shell-account-menu-name">{account.name}</span>}
                     {(account.items ?? []).map((i) => (
-                      <a key={i.id} id={`${base}-${i.id}`} className="dk-app-shell-entry" href={i.href}>
+                      <a key={i.id} id={itemId(i.id)} className="dk-app-shell-entry" href={i.href} onClick={() => setAccountOpen(false)}>
                         {i.label}
                       </a>
                     ))}
                   </span>
-                ) : null}
+                )}
               </span>
             )}
             {cart === undefined ? null : (
@@ -140,8 +157,8 @@ export function AppShell(props: AppShellProps): React.ReactElement {
         </div>
         <nav id={navId} className="dk-app-shell-nav" aria-label={menuLabel}>
           {shown.map((s) => (
-            <div key={s.id} className="dk-app-shell-section" role="group" aria-labelledby={`${base}-${s.id}-label`}>
-              <span id={`${base}-${s.id}-label`} className="dk-app-shell-section-label">
+            <div key={s.id} className="dk-app-shell-section" role="group" aria-labelledby={sectionLabelId(s.id)}>
+              <span id={sectionLabelId(s.id)} className="dk-app-shell-section-label">
                 {s.label}
               </span>
               {s.entries.map((e) => (
@@ -165,8 +182,10 @@ const control = { "box-sizing": "border-box", height: BAR, display: "inline-flex
  * Narrow (the default): a fixed bar of one control's height; the entries sit in
  * a menu panel. `wide`: the sidebar (sticky, beside the content, scrolling
  * within itself) or the top bar with the entries inline. `short`: the bar
- * unpins. Scroll padding equals the pinned height (WCAG 2.4.11). The one
- * literal extent is the viewport bound 100dvh (structure, not skin; plan D5).
+ * unpins. Scroll padding equals the pinned height (WCAG 2.4.11). The literals
+ * left are structure, not skin: the viewport bound 100dvh (alone, or less the
+ * bar in the open panel's calc; plan D5), the account menu's `top: 100%` (it
+ * opens below its control), and unitless zeros, grid lines and flex factors.
  */
 const rules: Rule[] = [
   statesRule(".dk-app-shell", appShellDef),
@@ -188,6 +207,8 @@ const rules: Rule[] = [
   { selector: ".dk-app-shell-cart", decls: { padding: `0 ${t("space-scale-3")}`, color: t("color-role-text"), "text-decoration": "none" } },
   { selector: ".dk-app-shell-count", decls: { "font-weight": t("type-weight-strong"), color: t("color-role-accent") } },
   { selector: ".dk-app-shell-account-name", decls: { display: "none" } },
+  // A name-only account: a toggle at the narrow form (the name is in its menu), a static label at the wide form.
+  { selector: '.dk-app-shell-account[data-menu="narrow"] > .dk-app-shell-account-static', decls: { display: "none" } },
   {
     selector: ".dk-app-shell-account-menu",
     decls: { position: "absolute", right: "0", top: "100%", "z-index": "1", display: "flex", "flex-direction": "column", "background-color": t("color-role-surface"), border: `${t("space-border-width")} solid ${t("color-role-border")}` },
@@ -220,6 +241,9 @@ const rules: Rule[] = [
   { when: "wide", selector: ".dk-app-shell-nav", decls: { display: "block" } },
   { when: "wide", selector: ".dk-app-shell-account-name", decls: { display: "inline" } },
   { when: "wide", selector: ".dk-app-shell-account-menu-name", decls: { display: "none" } },
+  { when: "wide", selector: '.dk-app-shell-account[data-menu="narrow"] > .dk-button', decls: { display: "none" } },
+  { when: "wide", selector: '.dk-app-shell-account[data-menu="narrow"] > .dk-app-shell-account-static', decls: { display: "inline-flex" } },
+  { when: "wide", selector: '.dk-app-shell-account[data-menu="narrow"] > .dk-app-shell-account-menu', decls: { display: "none" } },
   // wide, top bar: one row of one control's height, the entries inline between the product and the tools.
   { when: "wide", selector: `${TOPBAR} > .dk-app-shell-top`, decls: { display: "grid", "grid-template-columns": "auto minmax(0, 1fr) auto", height: BAR } },
   { when: "wide", selector: `${TOPBAR} .dk-app-shell-bar`, decls: { display: "contents" } },
@@ -236,4 +260,5 @@ const rules: Rule[] = [
   { when: "short", selector: '.dk-app-shell[data-open="true"] .dk-app-shell-nav', decls: { "max-height": "none" } },
 ];
 
-export const appShellStyles: ComponentStyles = { elementType: "nav", rules };
+// The root is a generic container (a <div> holding the nav and <main>), like DataTable's.
+export const appShellStyles: ComponentStyles = { elementType: "generic", rules };
